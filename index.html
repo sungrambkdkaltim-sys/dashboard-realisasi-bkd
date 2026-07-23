@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard Realisasi Anggaran BKD Kaltim 2026</title>
+    <title>Dashboard Realisasi Anggaran BKD 2026</title>
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <!-- Tailwind CSS -->
@@ -18,94 +18,154 @@
             theme: {
                 extend: {
                     fontFamily: { sans: ['Outfit', 'sans-serif'] },
-                    colors: { primary: '#1e40af', secondary: '#3b82f6', bkd: '#0ea5e9', uptd: '#f59e0b' }
+                    colors: { primary: '#1e3a8a', secondary: '#3b82f6', accent: '#10b981', bkd: '#0ea5e9', uptd: '#f59e0b' }
                 }
             }
         }
     </script>
     <style>
-        body { background-color: #f8fafc; }
-        .tab-btn { transition: all 0.3s ease; }
-        .tab-content { animation: fadeIn 0.4s ease-out; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        body { background-color: #f1f5f9; }
+        /* Glass Effect untuk Kartu */
         .glass-card {
-            background: #ffffff;
-            border: 1px solid rgba(226, 232, 240, 0.8);
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.01);
+            transition: all 0.3s ease;
         }
+        .glass-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+        /* Animasi Transisi Tab & Load */
+        .fade-in { animation: fadeIn 0.6s ease-out forwards; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+        .tab-btn { transition: all 0.3s ease; }
     </style>
 </head>
-<body class="text-slate-800 font-sans min-h-screen flex flex-col">
+<body class="text-slate-800 antialiased min-h-screen flex flex-col">
 
-    <!-- Navbar -->
-    <nav class="bg-gradient-to-r from-slate-900 to-primary text-white shadow-xl">
-        <div class="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
-            <div class="text-xl font-bold flex items-center tracking-wide">
-                <i class="fas fa-chart-line text-secondary mr-3 text-2xl"></i>
-                Dashboard Kinerja Anggaran 2026
+    <!-- Navbar Modern Gradient -->
+    <nav class="bg-gradient-to-r from-primary to-secondary text-white shadow-lg relative overflow-hidden">
+        <div class="absolute inset-0 bg-white/10 opacity-50 bg-[radial-gradient(#fff_1px,transparent_1px)] [background-size:20px_20px]"></div>
+        <div class="max-w-7xl mx-auto px-6 py-5 flex justify-between items-center relative z-10">
+            <div class="text-2xl font-bold flex items-center tracking-wide">
+                <div class="bg-white/20 p-2 rounded-lg mr-3 backdrop-blur-sm">
+                    <i class="fas fa-chart-pie"></i>
+                </div>
+                Realisasi Anggaran 2026
             </div>
-            <div class="text-xs font-semibold bg-white/10 border border-white/20 px-4 py-2 rounded-full hidden sm:block">
-                BKD Prov. Kaltim & UPTD Penilaian Kompetensi
+            <div class="text-sm font-medium bg-white/20 px-4 py-2 rounded-full backdrop-blur-sm hidden sm:block">
+                Badan Kepegawaian Daerah Prov. Kaltim
             </div>
         </div>
     </nav>
 
     <!-- Main Content -->
-    <div class="max-w-7xl mx-auto px-4 py-8 flex-grow w-full">
+    <div class="max-w-7xl mx-auto px-6 py-8 flex-grow w-full">
         
         <!-- Loading State -->
         <div id="loading" class="flex flex-col justify-center items-center py-20 h-64">
-            <div class="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-secondary mb-4"></div>
+            <div class="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-secondary mb-4"></div>
             <p class="text-slate-500 font-medium animate-pulse">Menyinkronkan data dengan Google Sheets...</p>
         </div>
 
-        <!-- Konten Utama (Disembunyikan saat Loading) -->
-        <div id="main-content" class="hidden">
-            <!-- Summary Cards (Selalu Tampil) -->
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                <div class="glass-card rounded-xl p-5 border-l-4 border-slate-700">
-                    <p class="text-slate-500 text-xs font-bold uppercase mb-1">Total Pagu (BKD + UPTD)</p>
-                    <h3 id="val-pagu" class="text-xl font-black text-slate-800">-</h3>
-                </div>
-                <div class="glass-card rounded-xl p-5 border-l-4 border-green-500">
-                    <p class="text-slate-500 text-xs font-bold uppercase mb-1">Total Realisasi</p>
-                    <h3 id="val-realisasi" class="text-xl font-black text-green-600">-</h3>
-                </div>
-                <div class="glass-card rounded-xl p-5 border-l-4 border-rose-500">
-                    <p class="text-slate-500 text-xs font-bold uppercase mb-1">Sisa Anggaran</p>
-                    <h3 id="val-sisa" class="text-xl font-black text-rose-600">-</h3>
-                </div>
-                <div class="glass-card rounded-xl p-5 border-l-4 border-emerald-500 relative overflow-hidden">
-                    <p class="text-slate-500 text-xs font-bold uppercase mb-1">Total Serapan (%)</p>
-                    <h3 id="val-persen" class="text-3xl font-black text-emerald-600">-</h3>
+        <!-- Dashboard Content -->
+        <div id="main-content" class="hidden fade-in">
+            
+            <div class="flex justify-between items-end mb-6">
+                <div>
+                    <h2 class="text-2xl font-bold text-slate-800">Ringkasan Eksekutif</h2>
+                    <p class="text-slate-500 text-sm mt-1">Berdasarkan data bulan terakhir yang tercatat</p>
                 </div>
             </div>
 
-            <!-- TAB NAVIGATION MENU -->
-            <div class="bg-white shadow rounded-t-lg border-b border-gray-200 px-6 pt-4 flex space-x-6 overflow-x-auto">
-                <button id="btn-overview" onclick="switchTab('overview')" class="tab-btn pb-3 text-sm font-bold border-b-2 border-blue-600 text-blue-600 whitespace-nowrap">
+            <!-- Summary Cards (Desain Glassmorphism dengan Icon) -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+                <!-- Card Pagu -->
+                <div class="glass-card rounded-2xl p-6 relative overflow-hidden">
+                    <div class="absolute top-0 right-0 w-24 h-24 bg-blue-100 rounded-bl-full -mr-4 -mt-4 opacity-60"></div>
+                    <div class="flex justify-between items-start mb-4 relative z-10">
+                        <div>
+                            <p class="text-slate-500 text-xs font-bold uppercase tracking-wider mb-1">Total Pagu Anggaran</p>
+                            <h3 id="val-pagu" class="text-2xl font-black text-slate-800">-</h3>
+                        </div>
+                        <div class="bg-blue-100 text-blue-600 p-3 rounded-xl"><i class="fas fa-wallet text-xl"></i></div>
+                    </div>
+                </div>
+
+                <!-- Card Realisasi -->
+                <div class="glass-card rounded-2xl p-6 relative overflow-hidden">
+                    <div class="absolute top-0 right-0 w-24 h-24 bg-emerald-100 rounded-bl-full -mr-4 -mt-4 opacity-60"></div>
+                    <div class="flex justify-between items-start mb-4 relative z-10">
+                        <div>
+                            <p class="text-slate-500 text-xs font-bold uppercase tracking-wider mb-1">Total Realisasi</p>
+                            <h3 id="val-realisasi" class="text-2xl font-black text-emerald-600">-</h3>
+                        </div>
+                        <div class="bg-emerald-100 text-emerald-600 p-3 rounded-xl"><i class="fas fa-chart-line text-xl"></i></div>
+                    </div>
+                </div>
+
+                <!-- Card Sisa -->
+                <div class="glass-card rounded-2xl p-6 relative overflow-hidden">
+                    <div class="absolute top-0 right-0 w-24 h-24 bg-rose-100 rounded-bl-full -mr-4 -mt-4 opacity-60"></div>
+                    <div class="flex justify-between items-start mb-4 relative z-10">
+                        <div>
+                            <p class="text-slate-500 text-xs font-bold uppercase tracking-wider mb-1">Sisa Anggaran</p>
+                            <h3 id="val-sisa" class="text-2xl font-black text-rose-600">-</h3>
+                        </div>
+                        <div class="bg-rose-100 text-rose-600 p-3 rounded-xl"><i class="fas fa-coins text-xl"></i></div>
+                    </div>
+                </div>
+
+                <!-- Card Persentase -->
+                <div class="glass-card rounded-2xl p-6 relative overflow-hidden">
+                    <div class="absolute top-0 right-0 w-24 h-24 bg-amber-100 rounded-bl-full -mr-4 -mt-4 opacity-60"></div>
+                    <div class="flex justify-between items-start mb-3 relative z-10">
+                        <div>
+                            <p class="text-slate-500 text-xs font-bold uppercase tracking-wider mb-1">Persentase Serapan</p>
+                            <h3 id="val-persen" class="text-3xl font-black text-amber-500">-</h3>
+                        </div>
+                        <div class="bg-amber-100 text-amber-600 p-3 rounded-xl"><i class="fas fa-percentage text-xl"></i></div>
+                    </div>
+                    <!-- Progress bar mini -->
+                    <div class="w-full bg-slate-100 rounded-full h-1.5 mt-2 relative z-10">
+                        <div id="progress-bar" class="bg-gradient-to-r from-amber-400 to-amber-500 h-1.5 rounded-full" style="width: 0%; transition: width 1.5s ease-out;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB NAVIGATION MENU (Modernized) -->
+            <div class="glass-card rounded-t-2xl border-b border-gray-100 px-6 pt-4 flex space-x-8 overflow-x-auto mb-1">
+                <button id="btn-overview" onclick="switchTab('overview')" class="tab-btn pb-4 text-sm font-bold border-b-4 border-secondary text-secondary whitespace-nowrap">
                     <i class="fas fa-chart-bar mr-2"></i>Overview
                 </button>
-                <button id="btn-target" onclick="switchTab('target')" class="tab-btn pb-3 text-sm font-bold border-b-2 border-transparent text-gray-500 hover:text-blue-600 hover:border-blue-300 whitespace-nowrap">
+                <button id="btn-target" onclick="switchTab('target')" class="tab-btn pb-4 text-sm font-bold border-b-4 border-transparent text-slate-400 hover:text-secondary hover:border-blue-200 whitespace-nowrap">
                     <i class="fas fa-bullseye mr-2"></i>Kurva Target (S-Curve)
                 </button>
-                <button id="btn-komparasi" onclick="switchTab('komparasi')" class="tab-btn pb-3 text-sm font-bold border-b-2 border-transparent text-gray-500 hover:text-blue-600 hover:border-blue-300 whitespace-nowrap">
+                <button id="btn-komparasi" onclick="switchTab('komparasi')" class="tab-btn pb-4 text-sm font-bold border-b-4 border-transparent text-slate-400 hover:text-secondary hover:border-blue-200 whitespace-nowrap">
                     <i class="fas fa-building mr-2"></i>Komparasi BKD vs UPTD
                 </button>
             </div>
 
             <!-- TAB CONTENT AREA -->
-            <div class="bg-white shadow rounded-b-lg p-6 mb-8">
+            <div class="glass-card rounded-b-2xl rounded-tr-2xl p-8 mb-8 min-h-[400px]">
                 
                 <!-- Tampilan 1: Overview -->
-                <div id="tab-overview" class="tab-content block">
-                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div id="tab-overview" class="tab-content block fade-in">
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-10">
                         <div>
-                            <h3 class="text-lg font-bold text-gray-700 mb-4">Tren Realisasi Keuangan Kumulatif</h3>
+                            <div class="flex justify-between items-center mb-6">
+                                <h3 class="text-lg font-bold text-slate-700">Tren Realisasi Keuangan</h3>
+                                <span class="text-xs font-medium bg-blue-50 text-blue-600 px-3 py-1 rounded-full">Kumulatif</span>
+                            </div>
                             <div class="h-72 relative"><canvas id="trendChart"></canvas></div>
                         </div>
                         <div>
-                            <h3 class="text-lg font-bold text-gray-700 mb-4">Persentase Serapan Per Bulan (%)</h3>
+                            <div class="flex justify-between items-center mb-6">
+                                <h3 class="text-lg font-bold text-slate-700">Persentase Serapan per Bulan</h3>
+                                <span class="text-xs font-medium bg-emerald-50 text-emerald-600 px-3 py-1 rounded-full">% Target</span>
+                            </div>
                             <div class="h-72 relative"><canvas id="barChart"></canvas></div>
                         </div>
                     </div>
@@ -113,47 +173,46 @@
 
                 <!-- Tampilan 2: Kurva Target -->
                 <div id="tab-target" class="tab-content hidden">
-                    <div class="max-w-4xl mx-auto">
-                        <div class="flex justify-between items-center mb-4">
-                            <h3 class="text-lg font-bold text-gray-700">Kurva S (Target RPD vs Realisasi Aktual)</h3>
-                            <span class="text-xs font-bold bg-green-100 text-green-700 px-3 py-1 rounded-full"><i class="fas fa-info-circle mr-1"></i> Data Kumulatif Tahunan</span>
+                    <div class="max-w-5xl mx-auto fade-in">
+                        <div class="flex justify-between items-center mb-2">
+                            <h3 class="text-xl font-bold text-slate-700">Kurva S (Target RPD vs Realisasi Aktual)</h3>
+                            <span class="text-xs font-bold bg-green-100 text-green-700 px-4 py-1.5 rounded-full"><i class="fas fa-check-circle mr-1"></i> Kumulatif Tahunan</span>
                         </div>
-                        <p class="text-sm text-gray-500 mb-6">Membandingkan target Rencana Penarikan Dana (RPD) dengan serapan nyata di lapangan.</p>
+                        <p class="text-sm text-slate-500 mb-8">Membandingkan Rencana Penarikan Dana (RPD) dari dokumen target dengan serapan anggaran riil.</p>
                         <div class="h-80 relative"><canvas id="sCurveChart"></canvas></div>
                     </div>
                 </div>
 
                 <!-- Tampilan 3: Komparasi Unit -->
                 <div id="tab-komparasi" class="tab-content hidden">
-                    <div class="max-w-4xl mx-auto">
-                        <div class="flex justify-between items-center mb-4">
-                            <h3 class="text-lg font-bold text-gray-700">Beban Belanja Unit Kerja (Per Bulan)</h3>
-                            <div class="flex gap-3 text-sm">
-                                <span class="flex items-center"><span class="w-3 h-3 rounded-full bg-bkd mr-2"></span> BKD</span>
-                                <span class="flex items-center"><span class="w-3 h-3 rounded-full bg-uptd mr-2"></span> UPTD</span>
+                    <div class="max-w-5xl mx-auto fade-in">
+                        <div class="flex justify-between items-center mb-2">
+                            <h3 class="text-xl font-bold text-slate-700">Beban Belanja Unit Kerja</h3>
+                            <div class="flex gap-4 text-sm font-medium bg-slate-50 px-4 py-2 rounded-lg">
+                                <span class="flex items-center"><span class="w-3 h-3 rounded-full bg-bkd mr-2 shadow-sm"></span> BKD Induk</span>
+                                <span class="flex items-center"><span class="w-3 h-3 rounded-full bg-uptd mr-2 shadow-sm"></span> UPTD</span>
                             </div>
                         </div>
-                        <p class="text-sm text-gray-500 mb-6">Melihat unit mana yang melakukan penyerapan kas pada bulan tertentu.</p>
+                        <p class="text-sm text-slate-500 mb-8">Komposisi penyerapan kas per bulan berdasarkan unit pelaksana.</p>
                         <div class="h-80 relative"><canvas id="unitChart"></canvas></div>
                     </div>
                 </div>
             </div>
         </div>
-
+        
         <!-- Error State -->
-        <div id="error-state" class="hidden text-center py-20">
-            <div class="inline-flex items-center justify-center w-20 h-20 rounded-full bg-rose-100 text-rose-500 mb-6">
-                <i class="fas fa-exclamation-triangle text-4xl"></i>
+        <div id="error-state" class="hidden text-center py-20 fade-in">
+            <div class="inline-flex items-center justify-center w-24 h-24 rounded-full bg-rose-50 text-rose-500 mb-6 shadow-inner">
+                <i class="fas fa-exclamation-triangle text-5xl"></i>
             </div>
             <h3 class="text-2xl font-bold text-slate-800 mb-2">Gagal Memuat Data</h3>
-            <p id="error-msg" class="text-slate-500 max-w-md mx-auto">Terdapat masalah saat menarik data dari server. Pastikan URL Apps Script benar.</p>
+            <p id="error-msg" class="text-slate-500 max-w-md mx-auto">Terjadi masalah koneksi dengan Google Sheets. Pastikan URL Apps Script sudah dimasukkan dengan benar.</p>
         </div>
     </div>
 
-    <!-- Scripts -->
     <script>
         // ==========================================
-        // 1. MASUKKAN URL APPS SCRIPT ANDA DI SINI
+        // 1. URL APPS SCRIPT SUDAH DIMASUKKAN
         // ==========================================
         const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwBh-K_qneLNmjiqu13643WYKGKWOC0BfSuPcyRfGafO7gVtJXDOHsQ9lUZ7OpdNZ8/exec';
 
@@ -162,23 +221,27 @@
         // ==========================================
         function switchTab(tabId) {
             document.querySelectorAll('.tab-content').forEach(el => {
-                el.classList.remove('block');
+                el.classList.remove('block', 'fade-in');
                 el.classList.add('hidden');
             });
-            document.getElementById('tab-' + tabId).classList.remove('hidden');
-            document.getElementById('tab-' + tabId).classList.add('block');
+            const selectedTab = document.getElementById('tab-' + tabId);
+            selectedTab.classList.remove('hidden');
+            selectedTab.classList.add('block');
+            
+            // Re-trigger animation
+            setTimeout(() => { selectedTab.classList.add('fade-in'); }, 10);
 
             document.querySelectorAll('.tab-btn').forEach(el => {
-                el.classList.remove('border-blue-600', 'text-blue-600');
-                el.classList.add('border-transparent', 'text-gray-500');
+                el.classList.remove('border-secondary', 'text-secondary');
+                el.classList.add('border-transparent', 'text-slate-400');
             });
             const activeBtn = document.getElementById('btn-' + tabId);
-            activeBtn.classList.remove('border-transparent', 'text-gray-500');
-            activeBtn.classList.add('border-blue-600', 'text-blue-600');
+            activeBtn.classList.remove('border-transparent', 'text-slate-400');
+            activeBtn.classList.add('border-secondary', 'text-secondary');
         }
 
         // ==========================================
-        // 3. FUNGSI UTILITAS (Format & Pembersih Angka)
+        // 3. FUNGSI UTILITAS PENGOLAHAN ANGKA
         // ==========================================
         const formatRp = (angka) => {
             return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(angka);
@@ -201,113 +264,127 @@
         async function fetchData() {
             try {
                 const response = await fetch(SCRIPT_URL);
-                if (!response.ok) throw new Error("Koneksi ditolak oleh server");
+                if (!response.ok) throw new Error("Koneksi ditolak server");
                 
                 const data = await response.json();
-                
-                if (!data || data.length === 0) {
-                    throw new Error("Data berhasil ditarik, tetapi tabel kosong.");
-                }
+                if (!data || data.length === 0) throw new Error("Tabel data kosong");
 
-                // Fungsi kebal huruf kecil/besar untuk baca kolom
                 const getVal = (row, keyName) => {
                     const key = Object.keys(row).find(k => k.toLowerCase().includes(keyName.toLowerCase()));
                     return key ? row[key] : 0;
                 };
 
-                // --- UPDATE KARTU RINGKASAN ---
+                // Update Kartu Ringkasan
                 const latestData = data[data.length - 1];
+                const totalPersen = parseNumber(getVal(latestData, 'Persentase'));
+                
                 document.getElementById('val-pagu').textContent = formatRp(parseNumber(getVal(latestData, 'Pagu')));
                 document.getElementById('val-realisasi').textContent = formatRp(parseNumber(getVal(latestData, 'Realisasi')));
                 document.getElementById('val-sisa').textContent = formatRp(parseNumber(getVal(latestData, 'Sisa')));
-                document.getElementById('val-persen').textContent = parseNumber(getVal(latestData, 'Persentase')).toFixed(2) + '%';
-
-                // --- SIAPKAN DATA UNTUK GRAFIK ---
-                const labels = data.map(row => getVal(row, 'Bulan') || '?');
+                document.getElementById('val-persen').textContent = totalPersen.toFixed(2) + '%';
                 
-                // Data Overview
-                const realisasiRp = data.map(row => parseNumber(getVal(row, 'Realisasi')) / 1000000000); // Miliar
-                const realisasiPersen = data.map(row => parseNumber(getVal(row, 'Persentase')));
+                // Animasi Progress Bar
+                setTimeout(() => {
+                    document.getElementById('progress-bar').style.width = Math.min(totalPersen, 100) + '%';
+                }, 500);
 
-                // Data Target (S-Curve)
+                // Siapkan Data Grafik
+                const labels = data.map(row => getVal(row, 'Bulan') || '?');
+                const realisasiRp = data.map(row => parseNumber(getVal(row, 'Realisasi')) / 1000000000); 
+                const realisasiPersen = data.map(row => parseNumber(getVal(row, 'Persentase')));
                 const targetKumulatif = data.map(row => parseNumber(getVal(row, 'Target')));
                 const aktualKumulatif = realisasiPersen; 
-
-                // Data Komparasi Unit (Juta Rp)
                 const bkdBulanan = data.map(row => parseNumber(getVal(row, 'BKD')) / 1000000); 
                 const uptdBulanan = data.map(row => parseNumber(getVal(row, 'UPTD')) / 1000000);
 
-                // Sembunyikan Loading, Tampilkan Konten
+                // Tampilkan Konten
                 document.getElementById('loading').classList.add('hidden');
                 document.getElementById('main-content').classList.remove('hidden');
 
-                // Render Grafik
+                // Render Grafik dengan Animasi
                 renderCharts(labels, realisasiRp, realisasiPersen, targetKumulatif, aktualKumulatif, bkdBulanan, uptdBulanan);
 
             } catch (error) {
                 console.error("Gagal menarik data:", error);
                 document.getElementById('loading').classList.add('hidden');
                 document.getElementById('error-state').classList.remove('hidden');
-                document.getElementById('error-msg').textContent = error.message + ". Pastikan URL Google Apps Script benar.";
             }
         }
 
         // ==========================================
-        // 5. RENDER SEMUA GRAFIK
+        // 5. RENDER GRAFIK (Dengan Animasi & Desain Modern)
         // ==========================================
         function renderCharts(labels, realisasiRp, realisasiPersen, targetKumulatif, aktualKumulatif, bkdBulanan, uptdBulanan) {
             
-            // 1. Tren Realisasi (Overview)
-            new Chart(document.getElementById('trendChart').getContext('2d'), {
+            const chartOptions = {
+                responsive: true, maintainAspectRatio: false,
+                animation: { duration: 1500, easing: 'easeOutQuart' },
+                plugins: { legend: { display: false }, tooltip: { padding: 12, cornerRadius: 8 } }
+            };
+
+            // 1. Tren Realisasi (Overview) - Garis Melengkung & Gradasi
+            const ctxTrend = document.getElementById('trendChart').getContext('2d');
+            const gradTrend = ctxTrend.createLinearGradient(0, 0, 0, 300);
+            gradTrend.addColorStop(0, 'rgba(59, 130, 246, 0.4)');
+            gradTrend.addColorStop(1, 'rgba(59, 130, 246, 0.0)');
+
+            new Chart(ctxTrend, {
                 type: 'line',
                 data: {
                     labels: labels,
                     datasets: [{
                         label: 'Realisasi (Miliar Rp)', data: realisasiRp,
-                        borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                        borderWidth: 2, fill: true, tension: 0.3, pointRadius: 4
+                        borderColor: '#3b82f6', backgroundColor: gradTrend,
+                        borderWidth: 3, fill: true, tension: 0.4, 
+                        pointBackgroundColor: '#ffffff', pointBorderColor: '#3b82f6', pointBorderWidth: 2, pointRadius: 4
                     }]
                 },
-                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+                options: { ...chartOptions, scales: { y: { beginAtZero: true, grid: { borderDash: [4, 4] } }, x: { grid: { display: false } } } }
             });
 
-            // 2. Bar Serapan (Overview)
+            // 2. Bar Serapan (Overview) - Ujung Melengkung
             new Chart(document.getElementById('barChart').getContext('2d'), {
                 type: 'bar',
                 data: {
                     labels: labels,
                     datasets: [{
                         label: 'Serapan (%)', data: realisasiPersen,
-                        backgroundColor: '#10b981', borderRadius: 4
+                        backgroundColor: '#10b981', borderRadius: 6, maxBarThickness: 45
                     }]
                 },
                 options: { 
-                    responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
-                    scales: { y: { max: 100, ticks: { callback: v => v + "%" } } }
+                    ...chartOptions, 
+                    scales: { y: { max: 100, grid: { borderDash: [4, 4] }, ticks: { callback: v => v + "%" } }, x: { grid: { display: false } } }
                 }
             });
 
             // 3. S-Curve Chart (Target vs Aktual)
-            new Chart(document.getElementById('sCurveChart').getContext('2d'), {
+            const ctxSCurve = document.getElementById('sCurveChart').getContext('2d');
+            const gradSCurve = ctxSCurve.createLinearGradient(0, 0, 0, 300);
+            gradSCurve.addColorStop(0, 'rgba(16, 185, 129, 0.3)');
+            gradSCurve.addColorStop(1, 'rgba(16, 185, 129, 0.0)');
+
+            new Chart(ctxSCurve, {
                 type: 'line',
                 data: {
                     labels: labels,
                     datasets: [
                         {
                             label: 'Target RPD (%)', data: targetKumulatif,
-                            borderColor: '#9ca3af', borderDash: [5, 5], borderWidth: 2, tension: 0.3, fill: false
+                            borderColor: '#9ca3af', borderDash: [5, 5], borderWidth: 2, tension: 0.4, fill: false, pointRadius: 0
                         },
                         {
                             label: 'Realisasi Aktual (%)', data: aktualKumulatif,
-                            borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                            borderWidth: 3, tension: 0.3, fill: true, pointRadius: 4
+                            borderColor: '#10b981', backgroundColor: gradSCurve,
+                            borderWidth: 3, tension: 0.4, fill: true,
+                            pointBackgroundColor: '#ffffff', pointBorderColor: '#10b981', pointBorderWidth: 2, pointRadius: 5
                         }
                     ]
                 },
                 options: { 
-                    responsive: true, maintainAspectRatio: false,
+                    ...chartOptions, 
                     interaction: { mode: 'index', intersect: false },
-                    scales: { y: { max: 100, ticks: { callback: v => v + "%" } } }
+                    scales: { y: { max: 100, grid: { borderDash: [4, 4] }, ticks: { callback: v => v + "%" } }, x: { grid: { display: false } } }
                 }
             });
 
@@ -317,16 +394,16 @@
                 data: {
                     labels: labels,
                     datasets: [
-                        { label: 'BKD Induk (Juta Rp)', data: bkdBulanan, backgroundColor: '#0ea5e9' },
-                        { label: 'UPTD Penilaian (Juta Rp)', data: uptdBulanan, backgroundColor: '#f59e0b' }
+                        { label: 'BKD Induk (Juta Rp)', data: bkdBulanan, backgroundColor: '#0ea5e9', borderRadius: 4 },
+                        { label: 'UPTD Penilaian (Juta Rp)', data: uptdBulanan, backgroundColor: '#f59e0b', borderRadius: 4 }
                     ]
                 },
                 options: { 
-                    responsive: true, maintainAspectRatio: false,
+                    ...chartOptions, 
                     interaction: { mode: 'index', intersect: false },
                     scales: { 
                         x: { stacked: true, grid: { display: false } }, 
-                        y: { stacked: true, ticks: { callback: v => 'Rp ' + v } } 
+                        y: { stacked: true, grid: { borderDash: [4, 4] }, ticks: { callback: v => 'Rp ' + v } } 
                     }
                 }
             });
