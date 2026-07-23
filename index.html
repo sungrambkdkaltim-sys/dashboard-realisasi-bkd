@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Realisasi Anggaran BKD Kaltim 2026</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans">
+
+    <nav class="bg-blue-800 text-white shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
+            <div class="text-xl font-bold flex items-center">
+                <i class="fas fa-chart-line mr-3"></i> 
+                Dashboard Realisasi Anggaran 2026
+            </div>
+            <div class="text-sm">Badan Kepegawaian Daerah Prov. Kaltim</div>
+        </div>
+    </nav>
+
+    <div class="max-w-7xl mx-auto px-4 py-8">
+        
+        <div id="loading" class="text-center py-10">
+            <i class="fas fa-spinner fa-spin text-4xl text-blue-500 mb-4"></i>
+            <p class="text-gray-500">Mengambil data dari Google Sheets secara real-time...</p>
+        </div>
+
+        <div id="dashboard-content" class="hidden">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                <div class="bg-white rounded-lg shadow p-6 border-l-4 border-blue-500">
+                    <div class="text-gray-500 text-sm font-semibold uppercase mb-1">Total Pagu Anggaran</div>
+                    <div id="val-pagu" class="text-2xl font-bold text-gray-800">-</div>
+                </div>
+                <div class="bg-white rounded-lg shadow p-6 border-l-4 border-green-500">
+                    <div class="text-gray-500 text-sm font-semibold uppercase mb-1">Total Realisasi</div>
+                    <div id="val-realisasi" class="text-2xl font-bold text-green-600">-</div>
+                </div>
+                <div class="bg-white rounded-lg shadow p-6 border-l-4 border-red-500">
+                    <div class="text-gray-500 text-sm font-semibold uppercase mb-1">Sisa Anggaran</div>
+                    <div id="val-sisa" class="text-2xl font-bold text-red-600">-</div>
+                </div>
+                <div class="bg-white rounded-lg shadow p-6 border-l-4 border-yellow-500">
+                    <div class="text-gray-500 text-sm font-semibold uppercase mb-1">Persentase Serapan</div>
+                    <div id="val-persen" class="text-2xl font-bold text-yellow-600">-</div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-lg font-bold text-gray-700 mb-4">Tren Realisasi Keuangan Kumulatif</h3>
+                    <canvas id="trendChart" height="250"></canvas>
+                </div>
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-lg font-bold text-gray-700 mb-4">Persentase Serapan Per Bulan (%)</h3>
+                    <canvas id="barChart" height="250"></canvas>
+                </div>
+            </div>
+            
+            <div class="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-lg">
+                <p class="text-sm text-blue-700">
+                    <i class="fas fa-info-circle mr-2"></i>
+                    Data ditarik secara otomatis (real-time) dari Google Sheets "Master Realisasi 2026".
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // MASUKKAN URL APPS SCRIPT ANDA DI BAWAH INI
+        const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwBh-K_qneLNmjiqu13643WYKGKWOC0BfSuPcyRfGafO7gVtJXDOHsQ9lUZ7OpdNZ8/exec';
+
+        // Format Rupiah
+        const formatRp = (angka) => {
+            return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(angka);
+        };
+
+        async function fetchData() {
+            try {
+                const response = await fetch(SCRIPT_URL);
+                const data = await response.json();
+                
+                // Ambil data bulan terakhir untuk Summary Card
+                const latestData = data[data.length - 1];
+                document.getElementById('val-pagu').textContent = formatRp(latestData.Pagu);
+                document.getElementById('val-realisasi').textContent = formatRp(latestData.Realisasi);
+                document.getElementById('val-sisa').textContent = formatRp(latestData.Sisa);
+                document.getElementById('val-persen').textContent = latestData.Persentase + '%';
+
+                // Ekstrak data untuk Chart
+                const labels = data.map(row => row.Bulan);
+                const realisasiRp = data.map(row => row.Realisasi / 1000000000); // Ubah ke Miliar Rupiah
+                const realisasiPersen = data.map(row => row.Persentase);
+
+                renderCharts(labels, realisasiRp, realisasiPersen);
+                
+                // Sembunyikan loading, tampilkan dashboard
+                document.getElementById('loading').classList.add('hidden');
+                document.getElementById('dashboard-content').classList.remove('hidden');
+
+            } catch (error) {
+                console.error("Gagal menarik data:", error);
+                document.getElementById('loading').innerHTML = '<i class="fas fa-exclamation-triangle text-red-500 text-4xl mb-4"></i><p class="text-red-500">Gagal terhubung ke Google Sheets. Pastikan URL Apps Script benar dan akses publik diizinkan.</p>';
+            }
+        }
+
+        function renderCharts(labels, realisasiRp, realisasiPersen) {
+            // Tren Realisasi Chart
+            new Chart(document.getElementById('trendChart').getContext('2d'), {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Realisasi (Miliar Rupiah)',
+                        data: realisasiRp,
+                        borderColor: 'rgb(59, 130, 246)',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        borderWidth: 2, fill: true, tension: 0.3, pointRadius: 4
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+            });
+
+            // Bar Chart Persentase
+            new Chart(document.getElementById('barChart').getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Serapan (%)',
+                        data: realisasiPersen,
+                        backgroundColor: 'rgb(16, 185, 129)', borderRadius: 4
+                    }]
+                },
+                options: { 
+                    responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+                    scales: { y: { max: 100, ticks: { callback: value => value + "%" } } }
+                }
+            });
+        }
+
+        // Jalankan saat web dimuat
+        fetchData();
+    </script>
+</body>
+</html>
