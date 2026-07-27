@@ -227,6 +227,8 @@
                         <table class="min-w-full divide-y divide-slate-300 text-[13px] border-collapse border border-slate-400" id="detailTable">
                             <thead id="tabel-head"></thead>
                             <tbody id="tabel-body"></tbody>
+                            <!-- FIX #5: baris Total, hanya menjumlahkan baris detail Belanja -->
+                            <tfoot id="tabel-foot"></tfoot>
                         </table>
                     </div>
                 </div>
@@ -419,27 +421,34 @@
             thead.innerHTML = htmlHead;
         }
 
-        function buildRowHtml(row) {
-            const kodeRekening = row[0] ? String(row[0]).trim() : "";
-
-            // --- LOGIKA WARNA (REPLIKA EXCEL) ---
-            let bgClass = "bg-white"; // Default: Belanja
+        // Klasifikasi baris berdasarkan Kode Rekening — dipakai untuk styling DAN untuk
+        // menentukan baris mana yang boleh dijumlahkan di baris Total (hanya baris detail/Belanja,
+        // bukan baris rekap Program/Kegiatan/Sub Kegiatan yang nilainya sudah agregat).
+        function getRowMeta(kodeRekening) {
+            let bgClass = "bg-white"; // Default: Belanja (detail)
             let fontClass = "font-normal";
             let alignUraian = "pl-2";
+            let isDetail = true;
 
             if (kodeRekening === "5.03") {
-                bgClass = "bg-orange-100"; fontClass = "font-bold";
+                bgClass = "bg-orange-100"; fontClass = "font-bold"; isDetail = false;
             } else if (kodeRekening.startsWith("5.03.0.00")) {
-                bgClass = "bg-gray-200"; fontClass = "font-bold"; alignUraian = "pl-4";
+                bgClass = "bg-gray-200"; fontClass = "font-bold"; alignUraian = "pl-4"; isDetail = false;
             } else if (kodeRekening.length === 7) { // 5.03.01 (Program)
-                bgClass = "bg-indigo-100"; fontClass = "font-bold"; alignUraian = "pl-4";
+                bgClass = "bg-indigo-100"; fontClass = "font-bold"; alignUraian = "pl-4"; isDetail = false;
             } else if (kodeRekening.length === 12) { // 5.03.01.1.01 (Kegiatan)
-                bgClass = "bg-cyan-100"; fontClass = "font-semibold"; alignUraian = "pl-6";
+                bgClass = "bg-cyan-100"; fontClass = "font-semibold"; alignUraian = "pl-6"; isDetail = false;
             } else if (kodeRekening.length >= 16 && kodeRekening.startsWith("5.03")) { // Sub Kegiatan
-                bgClass = "bg-[#e5f5e0]"; fontClass = "font-semibold"; alignUraian = "pl-8";
+                bgClass = "bg-[#e5f5e0]"; fontClass = "font-semibold"; alignUraian = "pl-8"; isDetail = false;
             } else if (kodeRekening.startsWith("5.1.")) { // Rekening Belanja
                 alignUraian = "pl-10";
             }
+            return { bgClass, fontClass, alignUraian, isDetail };
+        }
+
+        function buildRowHtml(row) {
+            const kodeRekening = row[0] ? String(row[0]).trim() : "";
+            const { bgClass, fontClass, alignUraian } = getRowMeta(kodeRekening);
 
             let tr = `<tr class="${bgClass} ${fontClass} border-b border-slate-300 print:border-black hover:bg-yellow-50 transition-colors">`;
             for (let c = 0; c < 6; c++) {
@@ -454,31 +463,64 @@
             return tr;
         }
 
+        // FIX #5: format angka gaya Indonesia (ribuan titik, 2 desimal koma) tanpa simbol mata uang,
+        // konsisten dengan format yang sudah ada di kolom Pagu/Realisasi/Sisa sheet.
+        const formatNumber = (num) => num.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
         // FIX #2: filter baris tabel (baris 4 s.d. akhir) berdasarkan Kode Rekening / Uraian.
         // Header (3 baris pertama) tidak pernah difilter — hanya isi tabel.
         function filterTable() {
             const keyword = document.getElementById('tabelSearch').value.trim().toLowerCase();
             const tbody = document.getElementById('tabel-body');
+            const tfoot = document.getElementById('tabel-foot');
             if (!currentBulanData.length) return;
 
             const rows = [];
             let matchCount = 0;
+            let detailCount = 0;
+            // FIX #5: akumulasi total hanya dari baris detail Belanja (isDetail === true),
+            // supaya tidak dobel-hitung dengan baris rekap Program/Kegiatan/Sub Kegiatan.
+            let totalPagu = 0, totalRealisasi = 0, totalSisa = 0;
+
             for (let i = 3; i < currentBulanData.length; i++) {
                 const row = currentBulanData[i];
-                const kodeRekening = row[0] ? String(row[0]).toLowerCase() : "";
+                const kodeRekeningRaw = row[0] ? String(row[0]).trim() : "";
+                const kodeRekening = kodeRekeningRaw.toLowerCase();
                 const uraian = row[1] ? String(row[1]).toLowerCase() : "";
 
                 if (keyword && !kodeRekening.includes(keyword) && !uraian.includes(keyword)) continue;
 
                 matchCount++;
                 rows.push(buildRowHtml(row));
+
+                if (getRowMeta(kodeRekeningRaw).isDetail) {
+                    detailCount++;
+                    totalPagu += parseNumber(row[2]);
+                    totalRealisasi += parseNumber(row[3]);
+                    totalSisa += parseNumber(row[4]);
+                }
             }
 
             tbody.innerHTML = rows.length ? rows.join('') : `<tr><td colspan="6" class="p-6 text-center text-slate-400">Tidak ada baris yang cocok dengan pencarian.</td></tr>`;
 
+            // FIX #5: render baris Total (hanya kalau ada minimal 1 baris detail yang cocok)
+            if (detailCount > 0) {
+                const totalPersen = totalPagu > 0 ? (totalRealisasi / totalPagu * 100) : 0;
+                tfoot.innerHTML = `
+                    <tr class="bg-slate-700 text-white font-bold border-t-2 border-slate-800">
+                        <td colspan="2" class="p-2 border border-slate-400 text-center">TOTAL (${detailCount} baris detail)</td>
+                        <td class="p-2 border border-slate-400 text-right pr-2">${formatNumber(totalPagu)}</td>
+                        <td class="p-2 border border-slate-400 text-right pr-2">${formatNumber(totalRealisasi)}</td>
+                        <td class="p-2 border border-slate-400 text-right pr-2">${formatNumber(totalSisa)}</td>
+                        <td class="p-2 border border-slate-400 text-right pr-2">${totalPersen.toFixed(2)}</td>
+                    </tr>`;
+            } else {
+                tfoot.innerHTML = '';
+            }
+
             const totalRows = currentBulanData.length - 3;
             document.getElementById('tabel-count').textContent = keyword
-                ? `Menampilkan ${matchCount} dari ${totalRows} baris untuk "${keyword}"`
+                ? `Menampilkan ${matchCount} dari ${totalRows} baris untuk "${keyword}" — total dihitung dari ${detailCount} baris detail (baris rekap Program/Kegiatan/Sub Kegiatan tidak diikutkan agar tidak dobel-hitung)`
                 : `Menampilkan seluruh ${totalRows} baris`;
         }
 
