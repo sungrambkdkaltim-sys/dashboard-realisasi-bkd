@@ -7,6 +7,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- FIX #3: SheetJS untuk export tabel LRA ke file Excel -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 
     <script>
@@ -115,6 +117,7 @@
 
                 <!-- Tab 1: Overview -->
                 <div id="tab-overview" class="tab-content block fade-in no-print">
+                    <p class="text-xs text-slate-400 mb-4"><i class="fas fa-circle-info mr-1"></i>Klik titik/batang pada grafik untuk melihat rincian LRA bulan tersebut.</p>
                     <div class="grid grid-cols-1 lg:grid-cols-2 gap-10">
                         <div><h3 class="text-lg font-bold text-slate-700 mb-6">Tren Realisasi Keuangan <span class="text-xs font-normal text-slate-400">(Miliar Rupiah)</span></h3><div class="h-72 relative"><canvas id="trendChart"></canvas></div></div>
                         <div><h3 class="text-lg font-bold text-slate-700 mb-6">Persentase Serapan per Bulan</h3><div class="h-72 relative"><canvas id="barChart"></canvas></div></div>
@@ -180,6 +183,10 @@
                                 <option value="November">November</option>
                                 <option value="Desember">Desember</option>
                             </select>
+                            <!-- FIX #3: export data bulan aktif ke file .xlsx -->
+                            <button onclick="exportToExcel()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg text-sm px-5 py-2.5 shadow transition flex items-center">
+                                <i class="fas fa-file-excel mr-2"></i> Unduh Excel
+                            </button>
                             <button onclick="window.print()" class="bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg text-sm px-5 py-2.5 shadow transition flex items-center">
                                 <i class="fas fa-print mr-2"></i> Cetak Dokumen
                             </button>
@@ -480,17 +487,59 @@
             filterTable();
         }
 
+        // FIX #3: unduh data bulan aktif sebagai .xlsx menggunakan data yang sudah tersimpan
+        // di memori (currentBulanData) — tidak perlu fetch ulang ke Apps Script.
+        // Catatan: yang diunduh adalah seluruh data bulan tersebut, bukan hasil filter pencarian,
+        // supaya file yang dibagikan tetap lengkap.
+        function exportToExcel() {
+            const bulan = document.getElementById('bulanSelector').value;
+            if (!currentBulanData.length) {
+                alert('Pilih bulan terlebih dahulu sebelum mengunduh.');
+                return;
+            }
+            const ws = XLSX.utils.aoa_to_sheet(currentBulanData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, bulan || 'LRA');
+            XLSX.writeFile(wb, `LRA_BKD_${bulan}_2026.xlsx`);
+        }
+
+        // FIX #2: pindah ke tab Rincian LRA Bulanan & langsung pilih bulan yang diklik di chart
+        function goToBulanTabel(bulan) {
+            if (!bulan) return;
+            switchTab('tabel');
+            const sel = document.getElementById('bulanSelector');
+            // Cek apakah label bulan dari chart cocok dengan salah satu opsi di dropdown
+            const match = [...sel.options].some(opt => opt.value === bulan);
+            if (!match) return; // label tidak dikenali, jangan paksa pilih
+            sel.value = bulan;
+            fetchDetailBulan();
+        }
+
         // =====================================
         // RENDER CHART
         // =====================================
+        // FIX #2: bungkus opsi chart dengan onClick (drill-down ke tabel bulan yang diklik)
+        // dan onHover (ubah cursor jadi pointer di atas titik/bar data, jadi terlihat bisa diklik).
+        function withDrilldown(baseOpts, labels) {
+            return {
+                ...baseOpts,
+                onClick: (evt, elements) => {
+                    if (elements.length > 0) goToBulanTabel(labels[elements[0].index]);
+                },
+                onHover: (evt, elements) => {
+                    evt.native.target.style.cursor = elements.length ? 'pointer' : 'default';
+                }
+            };
+        }
+
         function renderCharts(labels, rp, persen, target, aktual, bkd, uptd, pa, k1, k2, k3) {
             const opts = { responsive: true, maintainAspectRatio: false, animation: { duration: 1500 }, plugins: { legend: { display: false } } };
             const gr = document.getElementById('trendChart').getContext('2d').createLinearGradient(0,0,0,300); gr.addColorStop(0,'rgba(59,130,246,0.4)'); gr.addColorStop(1,'rgba(59,130,246,0)');
-            new Chart(document.getElementById('trendChart'), { type: 'line', data: { labels, datasets: [{ data: rp, borderColor: '#3b82f6', backgroundColor: gr, fill: true, tension: 0.4 }] }, options: opts });
-            new Chart(document.getElementById('barChart'), { type: 'bar', data: { labels, datasets: [{ data: persen, backgroundColor: '#10b981', borderRadius: 4 }] }, options: opts });
-            new Chart(document.getElementById('sCurveChart'), { type: 'line', data: { labels, datasets: [{ data: target, borderColor: '#9ca3af', borderDash: [5,5] }, { data: aktual, borderColor: '#10b981', fill: true }] }, options: opts });
-            new Chart(document.getElementById('unitChart'), { type: 'bar', data: { labels, datasets: [{ data: bkd, backgroundColor: '#0ea5e9' }, { data: uptd, backgroundColor: '#f59e0b' }] }, options: { ...opts, scales: { x: { stacked: false }, y: { stacked: false } } } });
-            new Chart(document.getElementById('paKpaChart'), { type: 'bar', data: { labels, datasets: [{ data: pa, backgroundColor: '#6366f1' }, { data: k1, backgroundColor: '#14b8a6' }, { data: k2, backgroundColor: '#ec4899' }, { data: k3, backgroundColor: '#f59e0b' }] }, options: { ...opts, scales: { x: { stacked: false }, y: { stacked: false } } } });
+            new Chart(document.getElementById('trendChart'), { type: 'line', data: { labels, datasets: [{ data: rp, borderColor: '#3b82f6', backgroundColor: gr, fill: true, tension: 0.4 }] }, options: withDrilldown(opts, labels) });
+            new Chart(document.getElementById('barChart'), { type: 'bar', data: { labels, datasets: [{ data: persen, backgroundColor: '#10b981', borderRadius: 4 }] }, options: withDrilldown(opts, labels) });
+            new Chart(document.getElementById('sCurveChart'), { type: 'line', data: { labels, datasets: [{ data: target, borderColor: '#9ca3af', borderDash: [5,5] }, { data: aktual, borderColor: '#10b981', fill: true }] }, options: withDrilldown(opts, labels) });
+            new Chart(document.getElementById('unitChart'), { type: 'bar', data: { labels, datasets: [{ data: bkd, backgroundColor: '#0ea5e9' }, { data: uptd, backgroundColor: '#f59e0b' }] }, options: withDrilldown({ ...opts, scales: { x: { stacked: false }, y: { stacked: false } } }, labels) });
+            new Chart(document.getElementById('paKpaChart'), { type: 'bar', data: { labels, datasets: [{ data: pa, backgroundColor: '#6366f1' }, { data: k1, backgroundColor: '#14b8a6' }, { data: k2, backgroundColor: '#ec4899' }, { data: k3, backgroundColor: '#f59e0b' }] }, options: withDrilldown({ ...opts, scales: { x: { stacked: false }, y: { stacked: false } } }, labels) });
         }
 
         fetchData();
