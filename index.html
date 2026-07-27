@@ -8,7 +8,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    
+
     <script>
         tailwind.config = {
             theme: { extend: { fontFamily: { sans: ['Outfit', 'sans-serif'] }, colors: { primary: '#1e3a8a', secondary: '#3b82f6', accent: '#10b981', bkd: '#0ea5e9', uptd: '#f59e0b' } } }
@@ -20,7 +20,7 @@
         .fade-in { animation: fadeIn 0.6s ease-out forwards; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
         .tab-btn { transition: all 0.3s ease; }
-        
+
         /* ATURAN CETAK (PRINT CSS) */
         @media print {
             body * { visibility: hidden; }
@@ -45,14 +45,29 @@
     </nav>
 
     <div class="max-w-7xl mx-auto px-6 py-8 flex-grow w-full">
+        <!-- Loading State -->
         <div id="loading" class="flex flex-col justify-center items-center py-20 h-64 no-print">
             <div class="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-secondary mb-4"></div>
             <p class="text-slate-500 font-medium animate-pulse">Menyinkronkan data dengan Google Sheets...</p>
         </div>
 
+        <!-- FIX #1: Error State — tampil kalau fetch ke Apps Script gagal, biar user tidak stuck di spinner -->
+        <div id="error-state" class="hidden flex-col justify-center items-center py-20 h-64 text-center no-print">
+            <div class="bg-rose-100 text-rose-500 w-16 h-16 rounded-full flex items-center justify-center mb-4">
+                <i class="fas fa-triangle-exclamation text-2xl"></i>
+            </div>
+            <h3 class="text-lg font-bold text-slate-800 mb-1">Gagal Memuat Data</h3>
+            <p id="error-msg" class="text-slate-500 text-sm max-w-md">Tidak dapat terhubung ke Google Sheets. Periksa URL Apps Script dan pastikan akses diatur ke "Anyone".</p>
+            <button onclick="fetchData()" class="mt-5 bg-secondary hover:bg-blue-700 text-white text-sm font-medium px-5 py-2.5 rounded-lg shadow transition">
+                <i class="fas fa-rotate-right mr-2"></i>Coba Lagi
+            </button>
+        </div>
+
         <div id="main-content" class="hidden fade-in">
             <div class="flex justify-between items-end mb-6 no-print">
                 <div><h2 class="text-2xl font-bold text-slate-800">Ringkasan Eksekutif</h2></div>
+                <!-- FIX #1: info kapan data terakhir disinkron dari Sheet -->
+                <p id="last-updated" class="text-xs text-slate-400 flex items-center gap-1.5"></p>
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10 no-print">
@@ -97,11 +112,11 @@
 
             <!-- Konten Tabs -->
             <div class="glass-card rounded-b-2xl p-8 mb-8 min-h-[400px]">
-                
+
                 <!-- Tab 1: Overview -->
                 <div id="tab-overview" class="tab-content block fade-in no-print">
                     <div class="grid grid-cols-1 lg:grid-cols-2 gap-10">
-                        <div><h3 class="text-lg font-bold text-slate-700 mb-6">Tren Realisasi Keuangan</h3><div class="h-72 relative"><canvas id="trendChart"></canvas></div></div>
+                        <div><h3 class="text-lg font-bold text-slate-700 mb-6">Tren Realisasi Keuangan <span class="text-xs font-normal text-slate-400">(Miliar Rupiah)</span></h3><div class="h-72 relative"><canvas id="trendChart"></canvas></div></div>
                         <div><h3 class="text-lg font-bold text-slate-700 mb-6">Persentase Serapan per Bulan</h3><div class="h-72 relative"><canvas id="barChart"></canvas></div></div>
                     </div>
                 </div>
@@ -109,7 +124,7 @@
                 <!-- Tab 2: Target -->
                 <div id="tab-target" class="tab-content hidden no-print">
                     <div class="max-w-5xl mx-auto fade-in">
-                        <h3 class="text-xl font-bold text-slate-700 mb-8">Kurva S (Target RPD vs Realisasi Aktual)</h3>
+                        <h3 class="text-xl font-bold text-slate-700 mb-8">Kurva S (Target RPD vs Realisasi Aktual) <span class="text-xs font-normal text-slate-400">(%)</span></h3>
                         <div class="h-80 relative"><canvas id="sCurveChart"></canvas></div>
                     </div>
                 </div>
@@ -117,7 +132,7 @@
                 <!-- Tab 3: Unit -->
                 <div id="tab-komparasi" class="tab-content hidden no-print">
                     <div class="max-w-5xl mx-auto fade-in">
-                        <h3 class="text-xl font-bold text-slate-700 mb-8">Komparasi Beban Belanja Unit Kerja</h3>
+                        <h3 class="text-xl font-bold text-slate-700 mb-8">Komparasi Beban Belanja Unit Kerja <span class="text-xs font-normal text-slate-400">(Juta Rupiah)</span></h3>
                         <div class="h-80 relative"><canvas id="unitChart"></canvas></div>
                     </div>
                 </div>
@@ -125,7 +140,13 @@
                 <!-- Tab 4: PA/KPA -->
                 <div id="tab-pakpa" class="tab-content hidden no-print">
                     <div class="max-w-5xl mx-auto fade-in">
-                        <h3 class="text-xl font-bold text-slate-700 mb-6">Distribusi Kewenangan PA & KPA</h3>
+                        <div class="flex items-center justify-between mb-6 flex-wrap gap-2">
+                            <h3 class="text-xl font-bold text-slate-700">Distribusi Kewenangan PA & KPA <span class="text-xs font-normal text-slate-400">(Juta Rupiah)</span></h3>
+                            <!-- FIX #2: Badge peringatan kalau chart ini memakai data simulasi/fallback, bukan data asli sheet -->
+                            <span id="badge-simulasi" class="hidden items-center gap-1.5 bg-amber-100 text-amber-700 text-[11px] font-bold px-3 py-1.5 rounded-full">
+                                <i class="fas fa-flask"></i> DATA SIMULASI — kolom "Realisasi PA/KPA" belum tersedia di Sheet
+                            </span>
+                        </div>
                         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                             <div class="bg-indigo-50/50 border border-indigo-100 rounded-xl p-4"><p class="text-[10px] font-bold text-indigo-600 uppercase mb-1">PA (Gaji ASN)</p><h4 id="val-pa" class="text-lg font-black text-indigo-700">-</h4></div>
                             <div class="bg-teal-50/50 border border-teal-100 rounded-xl p-4"><p class="text-[10px] font-bold text-teal-600 uppercase mb-1">KPA 1 (Penunjang)</p><h4 id="val-kpa1" class="text-lg font-black text-teal-700">-</h4></div>
@@ -142,7 +163,7 @@
                         <div>
                             <h3 class="text-xl font-bold text-slate-700">Laporan Rincian LRA (Kolom A-F, Baris 1-317)</h3>
                         </div>
-                        
+
                         <div class="flex gap-3 mt-4 md:mt-0">
                             <select id="bulanSelector" onchange="fetchDetailBulan()" class="bg-white border border-slate-300 text-slate-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2.5 shadow-sm font-medium">
                                 <option value="" disabled selected>-- Pilih Bulan --</option>
@@ -165,9 +186,28 @@
                         </div>
                     </div>
 
+                    <!-- FIX #2: Search box untuk filter tabel 317 baris berdasarkan Kode Rekening / Uraian -->
+                    <div id="tabel-search-bar" class="hidden mb-4 no-print">
+                        <div class="relative max-w-md">
+                            <i class="fas fa-search absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+                            <input type="text" id="tabelSearch" oninput="filterTable()" placeholder="Cari kode rekening atau uraian..."
+                                class="w-full pl-9 pr-9 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500 shadow-sm">
+                            <button onclick="clearTableSearch()" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500">
+                                <i class="fas fa-circle-xmark text-sm"></i>
+                            </button>
+                        </div>
+                        <p id="tabel-count" class="text-xs text-slate-400 mt-2"></p>
+                    </div>
+
                     <div id="tabel-loading" class="hidden flex-col items-center justify-center py-12 no-print">
                         <div class="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500 mb-2"></div>
                         <p class="text-slate-500 text-sm">Menarik 317 baris rincian data...</p>
+                    </div>
+
+                    <!-- FIX #1 (bagian tabel): pesan error khusus tabel, terpisah dari alert() -->
+                    <div id="tabel-error" class="hidden text-center py-12 bg-rose-50 rounded-xl border border-dashed border-rose-200 no-print">
+                        <i class="fas fa-triangle-exclamation text-3xl text-rose-400 mb-3"></i>
+                        <p id="tabel-error-msg" class="text-rose-500 text-sm">Gagal menarik data rincian LRA untuk bulan ini.</p>
                     </div>
 
                     <div id="tabel-placeholder" class="text-center py-16 bg-slate-50 rounded-xl border border-dashed border-slate-300 no-print">
@@ -197,7 +237,7 @@
             document.getElementById('tab-' + tabId).classList.remove('hidden');
             document.getElementById('tab-' + tabId).classList.add('block');
             setTimeout(() => { document.getElementById('tab-' + tabId).classList.add('fade-in'); }, 10);
-            
+
             document.querySelectorAll('.tab-btn').forEach(el => { el.classList.remove('border-secondary', 'text-secondary'); el.classList.add('border-transparent', 'text-slate-400'); });
             document.getElementById('btn-' + tabId).classList.remove('border-transparent', 'text-slate-400');
             document.getElementById('btn-' + tabId).classList.add('border-secondary', 'text-secondary');
@@ -208,16 +248,48 @@
             if (!val) return 0; if (typeof val === 'number') return val;
             return Number(String(val).replace(/[^0-9,-]+/g, "").replace(",", ".")) || 0;
         };
+
+        // FIX #4: escape HTML dasar sebelum data sheet disuntik lewat innerHTML (cegah XSS ringan dari isi cell)
+        const escapeHtml = (str) => String(str)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;");
+
         Chart.defaults.font.family = "'Outfit', sans-serif"; Chart.defaults.color = '#64748b';
 
         // =====================================
         // DATA GRAFIK (Dari Tab Master_Realisasi)
         // =====================================
         async function fetchData() {
+            // Reset tampilan setiap kali fetch dipanggil (termasuk saat klik "Coba Lagi")
+            document.getElementById('error-state').classList.add('hidden');
+            document.getElementById('error-state').classList.remove('flex');
+            document.getElementById('main-content').classList.add('hidden');
+            document.getElementById('loading').classList.remove('hidden');
+
             try {
                 const response = await fetch(SCRIPT_URL);
-                const data = await response.json();
-                
+                if (!response.ok) throw new Error(`Server merespons status ${response.status}`);
+                const raw = await response.json();
+
+                // FIX #1: dukung 2 format respons Apps Script —
+                // format lama (array polos) tetap jalan, format baru {updatedAt, data} akan menampilkan timestamp.
+                const data = Array.isArray(raw) ? raw : raw.data;
+                const updatedAt = Array.isArray(raw) ? null : raw.updatedAt;
+
+                const lastUpdatedEl = document.getElementById('last-updated');
+                if (updatedAt) {
+                    const tgl = new Date(updatedAt).toLocaleString('id-ID', { dateStyle: 'long', timeStyle: 'short' });
+                    lastUpdatedEl.innerHTML = `<i class="fas fa-clock-rotate-left"></i> Data disinkron terakhir: ${tgl}`;
+                } else {
+                    lastUpdatedEl.textContent = '';
+                }
+
+                if (!Array.isArray(data) || data.length === 0) {
+                    throw new Error('Data dari Google Sheets kosong atau format tidak sesuai.');
+                }
+
                 const getVal = (row, keyName) => {
                     const keys = Object.keys(row);
                     let key = keys.find(k => k.trim().toLowerCase() === keyName.toLowerCase());
@@ -227,7 +299,7 @@
 
                 const latestData = data[data.length - 1];
                 const totalPersen = parseNumber(getVal(latestData, 'Persentase'));
-                
+
                 document.getElementById('val-pagu').textContent = formatRp(parseNumber(getVal(latestData, 'Pagu')));
                 document.getElementById('val-realisasi').textContent = formatRp(parseNumber(getVal(latestData, 'Realisasi')));
                 document.getElementById('val-sisa').textContent = formatRp(parseNumber(getVal(latestData, 'Sisa')));
@@ -235,18 +307,27 @@
                 setTimeout(() => { document.getElementById('progress-bar').style.width = Math.min(totalPersen, 100) + '%'; }, 500);
 
                 const labels = data.map(row => getVal(row, 'Bulan') || '?');
-                const realisasiRp = data.map(row => parseNumber(getVal(row, 'Realisasi')) / 1000000000); 
+                const realisasiRp = data.map(row => parseNumber(getVal(row, 'Realisasi')) / 1000000000);
                 const realisasiPersen = data.map(row => parseNumber(getVal(row, 'Persentase')));
                 const targetKumulatif = data.map(row => parseNumber(getVal(row, 'Target')));
-                const bkdBulanan = data.map(row => parseNumber(getVal(row, 'Realisasi BKD')) / 1000000); 
+                const bkdBulanan = data.map(row => parseNumber(getVal(row, 'Realisasi BKD')) / 1000000);
                 const uptdBulanan = data.map(row => parseNumber(getVal(row, 'Realisasi UPTD')) / 1000000);
-                
+
                 let pa = data.map(row => parseNumber(getVal(row, 'Realisasi PA')) / 1000000);
                 let k1 = data.map(row => parseNumber(getVal(row, 'Realisasi KPA 1')) / 1000000);
                 let k2 = data.map(row => parseNumber(getVal(row, 'Realisasi KPA 2')) / 1000000);
                 let k3 = data.map(row => parseNumber(getVal(row, 'Realisasi KPA 3')) / 1000000);
-                
-                if(pa.every(v=>v===0)){ pa=[1200,1200,1250,1200,1300,1200]; k1=[500,400,2500,1100,600,1500]; k2=[681,455,3651,1677,466,1183]; k3=uptdBulanan;}
+
+                // FIX #2: tandai & tampilkan badge kalau kolom PA/KPA belum ada di Sheet, jangan diam-diam pakai angka contoh
+                const badge = document.getElementById('badge-simulasi');
+                if (pa.every(v => v === 0)) {
+                    pa = [1200,1200,1250,1200,1300,1200]; k1 = [500,400,2500,1100,600,1500];
+                    k2 = [681,455,3651,1677,466,1183]; k3 = uptdBulanan;
+                    badge.classList.remove('hidden'); badge.classList.add('flex');
+                } else {
+                    badge.classList.add('hidden'); badge.classList.remove('flex');
+                }
+
                 document.getElementById('val-pa').textContent = formatRp(pa[pa.length - 1] * 1000000);
                 document.getElementById('val-kpa1').textContent = formatRp(k1[k1.length - 1] * 1000000);
                 document.getElementById('val-kpa2').textContent = formatRp(k2[k2.length - 1] * 1000000);
@@ -255,99 +336,148 @@
                 document.getElementById('loading').classList.add('hidden');
                 document.getElementById('main-content').classList.remove('hidden');
                 renderCharts(labels, realisasiRp, realisasiPersen, targetKumulatif, realisasiPersen, bkdBulanan, uptdBulanan, pa, k1, k2, k3);
-            } catch (error) { console.error(error); }
+
+            } catch (error) {
+                // FIX #1: tampilkan error ke user, bukan cuma console.error
+                console.error('Gagal menarik data:', error);
+                document.getElementById('loading').classList.add('hidden');
+                document.getElementById('error-msg').textContent = error.message || 'Terjadi kesalahan saat menghubungi server.';
+                document.getElementById('error-state').classList.remove('hidden');
+                document.getElementById('error-state').classList.add('flex');
+            }
         }
 
         // =====================================
-        // LOGIKA BARU: REPLIKA TABEL LRA EXCEL
+        // LOGIKA: REPLIKA TABEL LRA EXCEL
         // =====================================
         async function fetchDetailBulan() {
             const bulan = document.getElementById('bulanSelector').value;
             if (!bulan) return;
-            
+
             document.getElementById('tabel-placeholder').classList.add('hidden');
+            document.getElementById('tabel-error').classList.add('hidden');
             document.getElementById('table-container').classList.add('hidden');
+            document.getElementById('tabel-search-bar').classList.add('hidden');
+            document.getElementById('tabelSearch').value = ''; // reset filter tiap ganti bulan
             document.getElementById('tabel-loading').classList.remove('hidden');
             document.getElementById('tabel-loading').classList.add('flex');
 
             try {
-                // Menarik Array 2D murni (Baris 1-317) dari Sheet Bulan bersangkutan
-                const response = await fetch(SCRIPT_URL + "?bulan=" + bulan);
+                const response = await fetch(SCRIPT_URL + "?bulan=" + encodeURIComponent(bulan));
+                if (!response.ok) throw new Error(`Server merespons status ${response.status}`);
                 const data = await response.json();
-                
-                if (data.error) { alert(data.error); return; }
+
+                if (data.error) { throw new Error(data.error); }
                 renderTable(data);
             } catch (error) {
-                alert("Gagal menarik data rincian LRA.");
+                // FIX #1: ganti alert() (mengganggu & mudah diabaikan) dengan panel error yang menetap di halaman
+                console.error('Gagal menarik data rincian LRA:', error);
+                document.getElementById('tabel-error-msg').textContent = error.message || 'Gagal menarik data rincian LRA.';
+                document.getElementById('tabel-error').classList.remove('hidden');
             } finally {
                 document.getElementById('tabel-loading').classList.add('hidden');
                 document.getElementById('tabel-loading').classList.remove('flex');
             }
         }
 
-        function renderTable(dataArray) {
-            const thead = document.getElementById('tabel-head');
-            const tbody = document.getElementById('tabel-body');
-            thead.innerHTML = ''; tbody.innerHTML = '';
+        // FIX #2: data mentah bulan aktif disimpan di memori supaya search box bisa
+        // memfilter ulang tanpa fetch ke Apps Script setiap kali user mengetik.
+        let currentBulanData = [];
 
-            // Pastikan data yang masuk adalah array 2 dimensi
-            if(!Array.isArray(dataArray[0])) return;
+        function renderTable(dataArray) {
+            if (!Array.isArray(dataArray[0])) return;
+            currentBulanData = dataArray;
+
+            renderTableHeader(dataArray);
+            document.getElementById('tabel-search-bar').classList.remove('hidden');
+            filterTable(); // render body awal (tanpa filter, keyword kosong)
+            document.getElementById('table-container').classList.remove('hidden');
+        }
+
+        function renderTableHeader(dataArray) {
+            const thead = document.getElementById('tabel-head');
 
             // Baris 1: Judul LRA
-            let htmlHead = `<tr><th colspan="6" class="text-center font-bold text-lg pt-4 pb-1 border-x border-t border-slate-400 bg-white">${dataArray[0][1] || dataArray[0][0] || "REALISASI ANGGARAN TAHUN 2026"}</th></tr>`;
-            
+            let htmlHead = `<tr><th colspan="6" class="text-center font-bold text-lg pt-4 pb-1 border-x border-t border-slate-400 bg-white">${escapeHtml(dataArray[0][1] || dataArray[0][0] || "REALISASI ANGGARAN TAHUN 2026")}</th></tr>`;
+
             // Baris 2: Nama BKD
-            htmlHead += `<tr><th colspan="6" class="text-center font-bold text-md pb-4 border-x border-b border-slate-400 bg-white">${dataArray[1][1] || dataArray[1][0] || "BADAN KEPEGAWAIAN DAERAH PROVINSI KALIMANTAN TIMUR"}</th></tr>`;
-            
+            htmlHead += `<tr><th colspan="6" class="text-center font-bold text-md pb-4 border-x border-b border-slate-400 bg-white">${escapeHtml(dataArray[1][1] || dataArray[1][0] || "BADAN KEPEGAWAIAN DAERAH PROVINSI KALIMANTAN TIMUR")}</th></tr>`;
+
             // Baris 3: Header Tabel (Kolom A-F) - Biru Excel
             htmlHead += `<tr class="bg-blue-200 text-slate-800 text-center border-y-2 border-slate-700 font-bold">`;
-            for(let c=0; c<6; c++) {
-                htmlHead += `<th class="p-2 border border-slate-400 align-middle">${dataArray[2][c] || ''}</th>`;
+            for (let c = 0; c < 6; c++) {
+                htmlHead += `<th class="p-2 border border-slate-400 align-middle">${escapeHtml(dataArray[2][c] || '')}</th>`;
             }
             htmlHead += `</tr>`;
             thead.innerHTML = htmlHead;
+        }
 
-            // Baris 4 sampai 317: Data LRA
-            for(let i = 3; i < dataArray.length; i++) {
-                const row = dataArray[i];
-                const kodeRekening = row[0] ? String(row[0]).trim() : "";
-                
-                // --- KECERDASAN BUATAN UNTUK WARNA (REPLIKA EXCEL) ---
-                let bgClass = "bg-white"; // Default: Belanja
-                let fontClass = "font-normal";
-                let alignUraian = "pl-2"; // Indentasi uraian
+        function buildRowHtml(row) {
+            const kodeRekening = row[0] ? String(row[0]).trim() : "";
 
-                if (kodeRekening === "5.03") { 
-                    bgClass = "bg-orange-100"; fontClass = "font-bold"; 
-                } else if (kodeRekening.startsWith("5.03.0.00")) { 
-                    bgClass = "bg-gray-200"; fontClass = "font-bold"; alignUraian = "pl-4";
-                } else if (kodeRekening.length === 7) { // 5.03.01 (Program)
-                    bgClass = "bg-indigo-100"; fontClass = "font-bold"; alignUraian = "pl-4";
-                } else if (kodeRekening.length === 12) { // 5.03.01.1.01 (Kegiatan)
-                    bgClass = "bg-cyan-100"; fontClass = "font-semibold"; alignUraian = "pl-6";
-                } else if (kodeRekening.length >= 16 && kodeRekening.startsWith("5.03")) { // 5.03.xx... (Sub Kegiatan)
-                    bgClass = "bg-[#e5f5e0]"; // Hijau pudar Excel
-                    fontClass = "font-semibold"; alignUraian = "pl-8";
-                } else if (kodeRekening.startsWith("5.1.")) { // Rekening Belanja
-                    alignUraian = "pl-10"; // Paling menjorok ke dalam
-                }
+            // --- LOGIKA WARNA (REPLIKA EXCEL) ---
+            let bgClass = "bg-white"; // Default: Belanja
+            let fontClass = "font-normal";
+            let alignUraian = "pl-2";
 
-                let tr = `<tr class="${bgClass} ${fontClass} border-b border-slate-300 print:border-black hover:bg-yellow-50 transition-colors">`;
-                
-                for(let c=0; c<6; c++) {
-                    let colData = row[c] !== undefined && row[c] !== null ? row[c] : '';
-                    let align = "text-left";
-                    
-                    if(c >= 2) align = "text-right pr-2"; // Kolom C,D,E,F (Pagu, Realisasi, dll)
-                    if(c === 0) align = "text-center"; // Kolom A (Kode Rekening)
-                    if(c === 1) align = `text-left ${alignUraian}`; // Kolom B (Uraian ber-indentasi)
-                    
-                    tr += `<td class="p-1.5 border border-slate-400 ${align}">${colData}</td>`;
-                }
-                tr += `</tr>`;
-                tbody.innerHTML += tr;
+            if (kodeRekening === "5.03") {
+                bgClass = "bg-orange-100"; fontClass = "font-bold";
+            } else if (kodeRekening.startsWith("5.03.0.00")) {
+                bgClass = "bg-gray-200"; fontClass = "font-bold"; alignUraian = "pl-4";
+            } else if (kodeRekening.length === 7) { // 5.03.01 (Program)
+                bgClass = "bg-indigo-100"; fontClass = "font-bold"; alignUraian = "pl-4";
+            } else if (kodeRekening.length === 12) { // 5.03.01.1.01 (Kegiatan)
+                bgClass = "bg-cyan-100"; fontClass = "font-semibold"; alignUraian = "pl-6";
+            } else if (kodeRekening.length >= 16 && kodeRekening.startsWith("5.03")) { // Sub Kegiatan
+                bgClass = "bg-[#e5f5e0]"; fontClass = "font-semibold"; alignUraian = "pl-8";
+            } else if (kodeRekening.startsWith("5.1.")) { // Rekening Belanja
+                alignUraian = "pl-10";
             }
-            document.getElementById('table-container').classList.remove('hidden');
+
+            let tr = `<tr class="${bgClass} ${fontClass} border-b border-slate-300 print:border-black hover:bg-yellow-50 transition-colors">`;
+            for (let c = 0; c < 6; c++) {
+                let colData = row[c] !== undefined && row[c] !== null ? row[c] : '';
+                let align = "text-left";
+                if (c >= 2) align = "text-right pr-2";
+                if (c === 0) align = "text-center";
+                if (c === 1) align = `text-left ${alignUraian}`;
+                tr += `<td class="p-1.5 border border-slate-400 ${align}">${escapeHtml(colData)}</td>`; // FIX #4
+            }
+            tr += `</tr>`;
+            return tr;
+        }
+
+        // FIX #2: filter baris tabel (baris 4 s.d. akhir) berdasarkan Kode Rekening / Uraian.
+        // Header (3 baris pertama) tidak pernah difilter — hanya isi tabel.
+        function filterTable() {
+            const keyword = document.getElementById('tabelSearch').value.trim().toLowerCase();
+            const tbody = document.getElementById('tabel-body');
+            if (!currentBulanData.length) return;
+
+            const rows = [];
+            let matchCount = 0;
+            for (let i = 3; i < currentBulanData.length; i++) {
+                const row = currentBulanData[i];
+                const kodeRekening = row[0] ? String(row[0]).toLowerCase() : "";
+                const uraian = row[1] ? String(row[1]).toLowerCase() : "";
+
+                if (keyword && !kodeRekening.includes(keyword) && !uraian.includes(keyword)) continue;
+
+                matchCount++;
+                rows.push(buildRowHtml(row));
+            }
+
+            tbody.innerHTML = rows.length ? rows.join('') : `<tr><td colspan="6" class="p-6 text-center text-slate-400">Tidak ada baris yang cocok dengan pencarian.</td></tr>`;
+
+            const totalRows = currentBulanData.length - 3;
+            document.getElementById('tabel-count').textContent = keyword
+                ? `Menampilkan ${matchCount} dari ${totalRows} baris untuk "${keyword}"`
+                : `Menampilkan seluruh ${totalRows} baris`;
+        }
+
+        function clearTableSearch() {
+            document.getElementById('tabelSearch').value = '';
+            filterTable();
         }
 
         // =====================================
