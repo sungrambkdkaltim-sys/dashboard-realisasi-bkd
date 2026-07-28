@@ -4,6 +4,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard Realisasi Anggaran BKD 2026</title>
+
+    <!-- FIX A3: meta description & Open Graph, supaya link dashboard tampil rapi saat dibagikan
+         (WhatsApp, Telegram, dll) — bukan cuma URL polos. Ganti og:url kalau domain berubah,
+         dan tambahkan og:image sendiri kalau punya logo/screenshot BKD yang representatif. -->
+    <meta name="description" content="Dashboard realisasi anggaran Badan Kepegawaian Daerah Provinsi Kalimantan Timur tahun 2026 — pantau pagu, realisasi, sisa anggaran, dan rincian LRA bulanan secara real-time.">
+    <meta property="og:type" content="website">
+    <meta property="og:locale" content="id_ID">
+    <meta property="og:title" content="Dashboard Realisasi Anggaran BKD 2026">
+    <meta property="og:description" content="Pantau realisasi anggaran BKD Provinsi Kalimantan Timur tahun 2026 — pagu, realisasi, sisa anggaran, dan rincian LRA bulanan.">
+    <meta property="og:url" content="https://sungrambkdkaltim-sys.github.io/dashboard-realisasi-bkd/">
+
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -68,8 +79,14 @@
         <div id="main-content" class="hidden fade-in">
             <div class="flex justify-between items-end mb-6 no-print">
                 <div><h2 class="text-2xl font-bold text-slate-800">Ringkasan Eksekutif</h2></div>
-                <!-- FIX #1: info kapan data terakhir disinkron dari Sheet -->
-                <p id="last-updated" class="text-xs text-slate-400 flex items-center gap-1.5"></p>
+                <div class="flex items-center gap-4">
+                    <!-- FIX A1: toggle auto-refresh, default mati supaya tidak mengejutkan pengguna biasa -->
+                    <label class="flex items-center gap-2 text-xs text-slate-400 cursor-pointer select-none">
+                        <input type="checkbox" id="autoRefreshToggle" onchange="toggleAutoRefresh()" class="rounded border-slate-300 text-secondary focus:ring-secondary">
+                        Auto-refresh (5 menit)
+                    </label>
+                    <p id="last-updated" class="text-xs text-slate-400 flex items-center gap-1.5"></p>
+                </div>
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10 no-print">
@@ -204,6 +221,21 @@
                             </button>
                         </div>
                         <p id="tabel-count" class="text-xs text-slate-400 mt-2"></p>
+
+                        <!-- FIX A2: peringatan kalau ada baris Realisasi > Pagu (indikasi salah input di Sheets) -->
+                        <div id="anomali-warning" class="hidden items-center gap-1.5 bg-rose-100 text-rose-700 text-[11px] font-bold px-3 py-1.5 rounded-full mt-2">
+                            <i class="fas fa-triangle-exclamation"></i> <span id="anomali-count-text"></span>
+                        </div>
+
+                        <!-- FIX A4: cek-silang total tabel detail vs kartu Ringkasan Eksekutif (Master_Realisasi) -->
+                        <div id="reconciliation-box" class="hidden mt-2 text-xs rounded-lg px-3 py-2"></div>
+                    </div>
+
+                    <!-- FIX A5: komposisi realisasi per jenis rekening (5.1, 5.2, dst) untuk bulan aktif -->
+                    <div id="jenis-belanja-box" class="hidden mb-6 no-print">
+                        <h4 class="text-sm font-bold text-slate-600 mb-1">Komposisi Realisasi per Jenis Rekening</h4>
+                        <p class="text-[11px] text-slate-400 mb-3">Dikelompokkan dari 2 segmen awal Kode Rekening di Sheet Anda (mis. 5.1, 5.2) — label persis mengikuti kode aslinya, hanya baris detail yang dihitung.</p>
+                        <div class="h-56 max-w-md"><canvas id="jenisBelanjaChart"></canvas></div>
                     </div>
 
                     <div id="tabel-loading" class="hidden flex-col items-center justify-center py-12 no-print">
@@ -282,23 +314,29 @@
 
         Chart.defaults.font.family = "'Outfit', sans-serif"; Chart.defaults.color = '#64748b';
 
+        // FIX A4: simpan data Master_Realisasi per bulan (bukan cuma bulan terakhir) supaya
+        // tabel rincian LRA bisa cek-silang totalnya terhadap Ringkasan Eksekutif untuk bulan manapun.
+        let masterDataByBulan = {};
+
         // =====================================
         // DATA GRAFIK (Dari Tab Master_Realisasi)
         // =====================================
-        async function fetchData() {
-            // Reset tampilan setiap kali fetch dipanggil (termasuk saat klik "Coba Lagi")
-            document.getElementById('error-state').classList.add('hidden');
-            document.getElementById('error-state').classList.remove('flex');
-            document.getElementById('main-content').classList.add('hidden');
-            document.getElementById('loading').classList.remove('hidden');
+        // FIX A1: parameter `silent` — dipakai auto-refresh supaya tidak menampilkan
+        // spinner/error overlay yang mengganggu tampilan kalau dashboard dipasang di layar TV.
+        // Saat silent=true dan fetch gagal, kegagalan hanya dicatat di console, tampilan lama tetap ada.
+        async function fetchData(silent = false) {
+            if (!silent) {
+                document.getElementById('error-state').classList.add('hidden');
+                document.getElementById('error-state').classList.remove('flex');
+                document.getElementById('main-content').classList.add('hidden');
+                document.getElementById('loading').classList.remove('hidden');
+            }
 
             try {
                 const response = await fetch(SCRIPT_URL);
                 if (!response.ok) throw new Error(`Server merespons status ${response.status}`);
                 const raw = await response.json();
 
-                // FIX #1: dukung 2 format respons Apps Script —
-                // format lama (array polos) tetap jalan, format baru {updatedAt, data} akan menampilkan timestamp.
                 const data = Array.isArray(raw) ? raw : raw.data;
                 const updatedAt = Array.isArray(raw) ? null : raw.updatedAt;
 
@@ -357,17 +395,48 @@
                 document.getElementById('val-kpa2').textContent = formatRp(k2[k2.length - 1] * 1000000);
                 document.getElementById('val-kpa3').textContent = formatRp(k3[k3.length - 1] * 1000000);
 
+                // FIX A4: simpan Pagu/Realisasi/Sisa per bulan untuk rekonsiliasi dengan tabel detail
+                masterDataByBulan = {};
+                data.forEach(row => {
+                    const bulanName = getVal(row, 'Bulan');
+                    if (!bulanName) return;
+                    masterDataByBulan[bulanName] = {
+                        pagu: parseNumber(getVal(row, 'Pagu')),
+                        realisasi: parseNumber(getVal(row, 'Realisasi')),
+                        sisa: parseNumber(getVal(row, 'Sisa'))
+                    };
+                });
+
                 document.getElementById('loading').classList.add('hidden');
                 document.getElementById('main-content').classList.remove('hidden');
                 renderCharts(labels, realisasiRp, realisasiPersen, targetKumulatif, realisasiPersen, bkdBulanan, uptdBulanan, pa, k1, k2, k3);
 
+                // Kalau tabel bulan sedang tampil, refresh juga rekonsiliasinya (angka Master_Realisasi terbaru)
+                if (currentBulanData.length) filterTable();
+
             } catch (error) {
-                // FIX #1: tampilkan error ke user, bukan cuma console.error
                 console.error('Gagal menarik data:', error);
-                document.getElementById('loading').classList.add('hidden');
-                document.getElementById('error-msg').textContent = error.message || 'Terjadi kesalahan saat menghubungi server.';
-                document.getElementById('error-state').classList.remove('hidden');
-                document.getElementById('error-state').classList.add('flex');
+                if (!silent) {
+                    document.getElementById('loading').classList.add('hidden');
+                    document.getElementById('error-msg').textContent = error.message || 'Terjadi kesalahan saat menghubungi server.';
+                    document.getElementById('error-state').classList.remove('hidden');
+                    document.getElementById('error-state').classList.add('flex');
+                }
+                // silent=true: kegagalan diam-diam, tampilan lama (data terakhir yang berhasil) dibiarkan apa adanya.
+            }
+        }
+
+        // FIX A1: kontrol interval auto-refresh (5 menit). Hanya me-refresh Ringkasan Eksekutif
+        // & grafik (Master_Realisasi) — tabel rincian bulanan tidak ikut di-refresh otomatis
+        // supaya tidak mengganggu kalau pengguna sedang scroll/baca tabel 300-an baris.
+        let autoRefreshTimer = null;
+        function toggleAutoRefresh() {
+            const checked = document.getElementById('autoRefreshToggle').checked;
+            if (checked) {
+                autoRefreshTimer = setInterval(() => fetchData(true), 5 * 60 * 1000);
+            } else if (autoRefreshTimer) {
+                clearInterval(autoRefreshTimer);
+                autoRefreshTimer = null;
             }
         }
 
@@ -417,6 +486,7 @@
             renderTableHeader(dataArray);
             document.getElementById('tabel-search-bar').classList.remove('hidden');
             filterTable(); // render body awal (tanpa filter, keyword kosong)
+            renderJenisBelanjaChart(); // FIX A5
             document.getElementById('table-container').classList.remove('hidden');
         }
 
@@ -465,7 +535,13 @@
 
         function buildRowHtml(row) {
             const kodeRekening = row[0] ? String(row[0]).trim() : "";
-            const { bgClass, fontClass, alignUraian } = getRowMeta(kodeRekening);
+            let { bgClass, fontClass, alignUraian, isDetail } = getRowMeta(kodeRekening);
+
+            // FIX A2: tandai baris detail yang Realisasi-nya melebihi Pagu — indikasi salah input di Sheets.
+            const pagu = parseNumber(row[2]);
+            const realisasi = parseNumber(row[3]);
+            const isAnomaly = isDetail && pagu > 0 && realisasi > pagu;
+            if (isAnomaly) { bgClass = "bg-rose-100 ring-1 ring-inset ring-rose-400"; fontClass = "font-semibold"; }
 
             let tr = `<tr class="${bgClass} ${fontClass} border-b border-slate-300 print:border-black hover:bg-yellow-50 transition-colors">`;
             for (let c = 0; c < 6; c++) {
@@ -474,6 +550,8 @@
                 if (c >= 2) align = "text-right pr-2";
                 if (c === 0) align = "text-center";
                 if (c === 1) align = `text-left ${alignUraian}`;
+                // FIX A2: ikon peringatan kecil di kolom Uraian untuk baris anomali
+                if (c === 1 && isAnomaly) colData = `⚠ ${colData}`;
                 tr += `<td class="p-1.5 border border-slate-400 ${align}">${escapeHtml(colData)}</td>`; // FIX #4
             }
             tr += `</tr>`;
@@ -495,8 +573,7 @@
             const rows = [];
             let matchCount = 0;
             let detailCount = 0;
-            // FIX #5: akumulasi total hanya dari baris detail Belanja (isDetail === true),
-            // supaya tidak dobel-hitung dengan baris rekap Program/Kegiatan/Sub Kegiatan.
+            let anomalyCount = 0; // FIX A2
             let totalPagu = 0, totalRealisasi = 0, totalSisa = 0;
 
             for (let i = 3; i < currentBulanData.length; i++) {
@@ -510,17 +587,20 @@
                 matchCount++;
                 rows.push(buildRowHtml(row));
 
-                if (getRowMeta(kodeRekeningRaw).isDetail) {
+                const meta = getRowMeta(kodeRekeningRaw);
+                if (meta.isDetail) {
                     detailCount++;
-                    totalPagu += parseNumber(row[2]);
-                    totalRealisasi += parseNumber(row[3]);
+                    const pagu = parseNumber(row[2]);
+                    const realisasi = parseNumber(row[3]);
+                    totalPagu += pagu;
+                    totalRealisasi += realisasi;
                     totalSisa += parseNumber(row[4]);
+                    if (pagu > 0 && realisasi > pagu) anomalyCount++; // FIX A2
                 }
             }
 
             tbody.innerHTML = rows.length ? rows.join('') : `<tr><td colspan="6" class="p-6 text-center text-slate-400">Tidak ada baris yang cocok dengan pencarian.</td></tr>`;
 
-            // FIX #5: render baris Total (hanya kalau ada minimal 1 baris detail yang cocok)
             if (detailCount > 0) {
                 const totalPersen = totalPagu > 0 ? (totalRealisasi / totalPagu * 100) : 0;
                 tfoot.innerHTML = `
@@ -535,10 +615,86 @@
                 tfoot.innerHTML = '';
             }
 
+            // FIX A2: banner peringatan anomali (dihitung dari baris yang sedang tampil)
+            const anomaliBox = document.getElementById('anomali-warning');
+            if (anomalyCount > 0) {
+                document.getElementById('anomali-count-text').textContent =
+                    `${anomalyCount} baris memiliki Realisasi > Pagu — kemungkinan salah input, mohon dicek di Sheets.`;
+                anomaliBox.classList.remove('hidden'); anomaliBox.classList.add('flex');
+            } else {
+                anomaliBox.classList.add('hidden'); anomaliBox.classList.remove('flex');
+            }
+
             const totalRows = currentBulanData.length - 3;
             document.getElementById('tabel-count').textContent = keyword
                 ? `Menampilkan ${matchCount} dari ${totalRows} baris untuk "${keyword}" — total dihitung dari ${detailCount} baris detail (baris rekap Program/Kegiatan/Sub Kegiatan tidak diikutkan agar tidak dobel-hitung)`
                 : `Menampilkan seluruh ${totalRows} baris`;
+
+            // FIX A4: rekonsiliasi hanya bermakna dibandingkan dengan total SATU BULAN PENUH,
+            // jadi hanya dihitung saat search box kosong (tidak sedang difilter sebagian).
+            if (!keyword) {
+                renderReconciliation(totalRealisasi, totalPagu, totalSisa);
+            } else {
+                document.getElementById('reconciliation-box').classList.add('hidden');
+            }
+        }
+
+        // FIX A4: bandingkan Total tabel detail (bulan yang sedang dipilih) dengan angka di kartu
+        // Ringkasan Eksekutif (sumber: Master_Realisasi). Ini alat bantu QA data, bukan penentu benar/salah —
+        // kalau ada selisih, itu tanda perlu dicek manual, bukan otomatis dianggap error.
+        function renderReconciliation(tabelRealisasi, tabelPagu, tabelSisa) {
+            const box = document.getElementById('reconciliation-box');
+            const bulan = document.getElementById('bulanSelector').value;
+            const master = masterDataByBulan[bulan];
+
+            if (!master) {
+                box.classList.add('hidden');
+                return;
+            }
+
+            const selisih = Math.abs(tabelRealisasi - master.realisasi);
+            const toleransi = 1; // toleransi Rp 1 untuk pembulatan desimal, bukan indikasi masalah
+
+            box.classList.remove('hidden');
+            if (selisih <= toleransi) {
+                box.className = 'mt-2 text-xs rounded-lg px-3 py-2 bg-emerald-50 text-emerald-700 border border-emerald-200';
+                box.innerHTML = `<i class="fas fa-circle-check mr-1"></i> Total Realisasi tabel (${formatRp(tabelRealisasi)}) cocok dengan Ringkasan Eksekutif bulan ${bulan}.`;
+            } else {
+                box.className = 'mt-2 text-xs rounded-lg px-3 py-2 bg-amber-50 text-amber-700 border border-amber-200';
+                box.innerHTML = `<i class="fas fa-triangle-exclamation mr-1"></i> Selisih ${formatRp(selisih)} antara Total tabel (${formatRp(tabelRealisasi)}) dan Ringkasan Eksekutif Master_Realisasi (${formatRp(master.realisasi)}) untuk bulan ${bulan}. Kemungkinan data di kedua sheet belum sinkron — perlu dicek manual, bukan berarti pasti salah.`;
+            }
+        }
+
+        // FIX A5: kelompokkan Realisasi baris detail berdasarkan 2 segmen awal Kode Rekening
+        // (mis. "5.1.02.04.001.00001" -> "5.1"), lalu render sebagai donut chart.
+        let jenisChartInstance = null;
+        function renderJenisBelanjaChart() {
+            const totals = {};
+            for (let i = 3; i < currentBulanData.length; i++) {
+                const row = currentBulanData[i];
+                const kode = row[0] ? String(row[0]).trim() : "";
+                if (!getRowMeta(kode).isDetail) continue;
+                const segmen = kode.split('.').slice(0, 2).join('.') || 'Lainnya';
+                totals[segmen] = (totals[segmen] || 0) + parseNumber(row[3]);
+            }
+
+            const labels = Object.keys(totals);
+            const values = Object.values(totals);
+            const box = document.getElementById('jenis-belanja-box');
+
+            if (labels.length === 0) { box.classList.add('hidden'); return; }
+            box.classList.remove('hidden');
+
+            const palette = ['#3b82f6', '#f59e0b', '#10b981', '#ec4899', '#6366f1', '#14b8a6', '#f43f5e'];
+            if (jenisChartInstance) jenisChartInstance.destroy();
+            jenisChartInstance = new Chart(document.getElementById('jenisBelanjaChart'), {
+                type: 'doughnut',
+                data: { labels, datasets: [{ data: values, backgroundColor: palette.slice(0, labels.length) }] },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { position: 'right', labels: { boxWidth: 12, font: { size: 11 } } } }
+                }
+            });
         }
 
         function clearTableSearch() {
@@ -591,14 +747,21 @@
             };
         }
 
+        // FIX A1: simpan instance chart supaya bisa di-destroy sebelum render ulang.
+        // Wajib ada karena renderCharts() sekarang bisa dipanggil berkali-kali oleh auto-refresh —
+        // tanpa ini, Chart.js akan error "Canvas is already in use" di panggilan kedua.
+        let mainChartInstances = {};
         function renderCharts(labels, rp, persen, target, aktual, bkd, uptd, pa, k1, k2, k3) {
             const opts = { responsive: true, maintainAspectRatio: false, animation: { duration: 1500 }, plugins: { legend: { display: false } } };
             const gr = document.getElementById('trendChart').getContext('2d').createLinearGradient(0,0,0,300); gr.addColorStop(0,'rgba(59,130,246,0.4)'); gr.addColorStop(1,'rgba(59,130,246,0)');
-            new Chart(document.getElementById('trendChart'), { type: 'line', data: { labels, datasets: [{ data: rp, borderColor: '#3b82f6', backgroundColor: gr, fill: true, tension: 0.4 }] }, options: withDrilldown(opts, labels) });
-            new Chart(document.getElementById('barChart'), { type: 'bar', data: { labels, datasets: [{ data: persen, backgroundColor: '#10b981', borderRadius: 4 }] }, options: withDrilldown(opts, labels) });
-            new Chart(document.getElementById('sCurveChart'), { type: 'line', data: { labels, datasets: [{ data: target, borderColor: '#9ca3af', borderDash: [5,5] }, { data: aktual, borderColor: '#10b981', fill: true }] }, options: withDrilldown(opts, labels) });
-            new Chart(document.getElementById('unitChart'), { type: 'bar', data: { labels, datasets: [{ data: bkd, backgroundColor: '#0ea5e9' }, { data: uptd, backgroundColor: '#f59e0b' }] }, options: withDrilldown({ ...opts, scales: { x: { stacked: false }, y: { stacked: false } } }, labels) });
-            new Chart(document.getElementById('paKpaChart'), { type: 'bar', data: { labels, datasets: [{ data: pa, backgroundColor: '#6366f1' }, { data: k1, backgroundColor: '#14b8a6' }, { data: k2, backgroundColor: '#ec4899' }, { data: k3, backgroundColor: '#f59e0b' }] }, options: withDrilldown({ ...opts, scales: { x: { stacked: false }, y: { stacked: false } } }, labels) });
+
+            Object.values(mainChartInstances).forEach(c => c.destroy());
+
+            mainChartInstances.trend = new Chart(document.getElementById('trendChart'), { type: 'line', data: { labels, datasets: [{ data: rp, borderColor: '#3b82f6', backgroundColor: gr, fill: true, tension: 0.4 }] }, options: withDrilldown(opts, labels) });
+            mainChartInstances.bar = new Chart(document.getElementById('barChart'), { type: 'bar', data: { labels, datasets: [{ data: persen, backgroundColor: '#10b981', borderRadius: 4 }] }, options: withDrilldown(opts, labels) });
+            mainChartInstances.sCurve = new Chart(document.getElementById('sCurveChart'), { type: 'line', data: { labels, datasets: [{ data: target, borderColor: '#9ca3af', borderDash: [5,5] }, { data: aktual, borderColor: '#10b981', fill: true }] }, options: withDrilldown(opts, labels) });
+            mainChartInstances.unit = new Chart(document.getElementById('unitChart'), { type: 'bar', data: { labels, datasets: [{ data: bkd, backgroundColor: '#0ea5e9' }, { data: uptd, backgroundColor: '#f59e0b' }] }, options: withDrilldown({ ...opts, scales: { x: { stacked: false }, y: { stacked: false } } }, labels) });
+            mainChartInstances.paKpa = new Chart(document.getElementById('paKpaChart'), { type: 'bar', data: { labels, datasets: [{ data: pa, backgroundColor: '#6366f1' }, { data: k1, backgroundColor: '#14b8a6' }, { data: k2, backgroundColor: '#ec4899' }, { data: k3, backgroundColor: '#f59e0b' }] }, options: withDrilldown({ ...opts, scales: { x: { stacked: false }, y: { stacked: false } } }, labels) });
         }
 
         fetchData();
