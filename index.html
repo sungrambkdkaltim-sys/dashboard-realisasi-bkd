@@ -241,6 +241,19 @@
     <script>
         const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwBh-K_qneLNmjiqu13643WYKGKWOC0BfSuPcyRfGafO7gVtJXDOHsQ9lUZ7OpdNZ8/exec';
 
+        // FIX #2: sinkronkan tab/bulan aktif ke query string URL, supaya link dashboard
+        // bisa dibagikan langsung ke tab & bulan tertentu (mis. ?tab=tabel&bulan=Juli).
+        // Pakai replaceState (bukan pushState) supaya tombol Back browser tidak dipenuhi
+        // riwayat tiap kali ganti tab.
+        function updateUrlState(updates) {
+            const params = new URLSearchParams(window.location.search);
+            Object.entries(updates).forEach(([k, v]) => {
+                if (v) params.set(k, v); else params.delete(k);
+            });
+            const query = params.toString();
+            history.replaceState(null, '', query ? `${window.location.pathname}?${query}` : window.location.pathname);
+        }
+
         function switchTab(tabId) {
             document.querySelectorAll('.tab-content').forEach(el => { el.classList.remove('block', 'fade-in'); el.classList.add('hidden'); });
             document.getElementById('tab-' + tabId).classList.remove('hidden');
@@ -250,6 +263,8 @@
             document.querySelectorAll('.tab-btn').forEach(el => { el.classList.remove('border-secondary', 'text-secondary'); el.classList.add('border-transparent', 'text-slate-400'); });
             document.getElementById('btn-' + tabId).classList.remove('border-transparent', 'text-slate-400');
             document.getElementById('btn-' + tabId).classList.add('border-secondary', 'text-secondary');
+
+            updateUrlState({ tab: tabId }); // FIX #2
         }
 
         const formatRp = (angka) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(angka);
@@ -362,6 +377,8 @@
         async function fetchDetailBulan() {
             const bulan = document.getElementById('bulanSelector').value;
             if (!bulan) return;
+
+            updateUrlState({ tab: 'tabel', bulan }); // FIX #2
 
             document.getElementById('tabel-placeholder').classList.add('hidden');
             document.getElementById('tabel-error').classList.add('hidden');
@@ -585,6 +602,27 @@
         }
 
         fetchData();
+
+        // FIX #2: kalau dashboard dibuka lewat link yang sudah berisi ?tab=...&bulan=...,
+        // langsung arahkan ke tab & bulan tersebut. Tidak bergantung pada fetchData() selesai,
+        // karena data tabel bulanan diambil terpisah lewat fetchDetailBulan().
+        (function applyDeepLinkOnLoad() {
+            const params = new URLSearchParams(window.location.search);
+            const tab = params.get('tab');
+            const bulan = params.get('bulan');
+
+            if (tab && document.getElementById('tab-' + tab)) {
+                switchTab(tab);
+            }
+            if (bulan) {
+                const sel = document.getElementById('bulanSelector');
+                const isValidBulan = [...sel.options].some(opt => opt.value === bulan);
+                if (isValidBulan) {
+                    sel.value = bulan;
+                    fetchDetailBulan();
+                }
+            }
+        })();
     </script>
 </body>
 </html>
