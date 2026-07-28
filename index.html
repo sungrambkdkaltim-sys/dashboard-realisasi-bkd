@@ -144,7 +144,7 @@
                 <!-- Tab 2: Target -->
                 <div id="tab-target" class="tab-content hidden no-print">
                     <div class="max-w-5xl mx-auto fade-in">
-                        <h3 class="text-xl font-bold text-slate-700 mb-8">Kurva S (Target RPD vs Realisasi Aktual) <span class="text-xs font-normal text-slate-400">(%)</span></h3>
+                        <h3 class="text-xl font-bold text-slate-700 mb-8">Kurva S (Target vs Realisasi) <span class="text-xs font-normal text-slate-400">(%)</span></h3>
                         <div class="h-80 relative"><canvas id="sCurveChart"></canvas></div>
                     </div>
                 </div>
@@ -167,11 +167,17 @@
                                 <i class="fas fa-flask"></i> DATA SIMULASI — kolom "Realisasi PA/KPA" belum tersedia di Sheet
                             </span>
                         </div>
-                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                            <div class="bg-indigo-50/50 border border-indigo-100 rounded-xl p-4"><p class="text-[10px] font-bold text-indigo-600 uppercase mb-1">PA (Gaji ASN)</p><h4 id="val-pa" class="text-lg font-black text-indigo-700">-</h4></div>
-                            <div class="bg-teal-50/50 border border-teal-100 rounded-xl p-4"><p class="text-[10px] font-bold text-teal-600 uppercase mb-1">KPA 1 (Penunjang)</p><h4 id="val-kpa1" class="text-lg font-black text-teal-700">-</h4></div>
-                            <div class="bg-pink-50/50 border border-pink-100 rounded-xl p-4"><p class="text-[10px] font-bold text-pink-600 uppercase mb-1">KPA 2 (Mutasi)</p><h4 id="val-kpa2" class="text-lg font-black text-pink-700">-</h4></div>
-                            <div class="bg-amber-50/50 border border-amber-100 rounded-xl p-4"><p class="text-[10px] font-bold text-amber-600 uppercase mb-1">KPA 3 (UPTD)</p><h4 id="val-kpa3" class="text-lg font-black text-amber-700">-</h4></div>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                            <div class="bg-indigo-50/50 border border-indigo-100 rounded-xl p-4"><p class="text-[10px] font-bold text-indigo-600 uppercase mb-1">PA</p><h4 id="val-pa" class="text-lg font-black text-indigo-700">-</h4></div>
+                            <div class="bg-teal-50/50 border border-teal-100 rounded-xl p-4"><p class="text-[10px] font-bold text-teal-600 uppercase mb-1">KPA 1</p><h4 id="val-kpa1" class="text-lg font-black text-teal-700">-</h4></div>
+                            <div class="bg-pink-50/50 border border-pink-100 rounded-xl p-4"><p class="text-[10px] font-bold text-pink-600 uppercase mb-1">KPA 2</p><h4 id="val-kpa2" class="text-lg font-black text-pink-700">-</h4></div>
+                            <div class="bg-amber-50/50 border border-amber-100 rounded-xl p-4"><p class="text-[10px] font-bold text-amber-600 uppercase mb-1">KPA 3</p><h4 id="val-kpa3" class="text-lg font-black text-amber-700">-</h4></div>
+                        </div>
+                        <div class="text-[11px] text-slate-400 leading-relaxed mb-6 space-y-0.5">
+                            <p><span class="font-semibold text-slate-500">PA:</span> Khusus "Penyediaan Gaji dan Tunjangan ASN"</p>
+                            <p><span class="font-semibold text-slate-500">KPA 1:</span> Bidang PPI ASN, Bidang Pengembangan ASN dan Sekretariat</p>
+                            <p><span class="font-semibold text-slate-500">KPA 2:</span> Bidang Pembinaan ASN dan Bidang Mutasi ASN</p>
+                            <p><span class="font-semibold text-slate-500">KPA 3:</span> UPTD Penilaian Kompetensi ASN</p>
                         </div>
                         <div class="h-80 relative"><canvas id="paKpaChart"></canvas></div>
                     </div>
@@ -181,7 +187,7 @@
                 <div id="tab-tabel" class="tab-content hidden fade-in">
                     <div class="flex flex-col md:flex-row justify-between items-center mb-6 no-print">
                         <div>
-                            <h3 class="text-xl font-bold text-slate-700">Laporan Rincian LRA (Kolom A-F, Baris 1-317)</h3>
+                            <h3 class="text-xl font-bold text-slate-700">Laporan Rincian LRA</h3>
                         </div>
 
                         <div class="flex gap-3 mt-4 md:mt-0">
@@ -231,13 +237,6 @@
                         <div id="reconciliation-box" class="hidden mt-2 text-xs rounded-lg px-3 py-2"></div>
                     </div>
 
-                    <!-- FIX A5: komposisi realisasi per jenis rekening (5.1, 5.2, dst) untuk bulan aktif -->
-                    <div id="jenis-belanja-box" class="hidden mb-6 no-print">
-                        <h4 class="text-sm font-bold text-slate-600 mb-1">Komposisi Realisasi per Jenis Rekening</h4>
-                        <p class="text-[11px] text-slate-400 mb-3">Dikelompokkan dari 2 segmen awal Kode Rekening di Sheet Anda (mis. 5.1, 5.2) — label persis mengikuti kode aslinya, hanya baris detail yang dihitung.</p>
-                        <div class="h-56 max-w-md"><canvas id="jenisBelanjaChart"></canvas></div>
-                    </div>
-
                     <div id="tabel-loading" class="hidden flex-col items-center justify-center py-12 no-print">
                         <div class="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500 mb-2"></div>
                         <p class="text-slate-500 text-sm">Menarik 317 baris rincian data...</p>
@@ -266,6 +265,11 @@
                 </div>
 
             </div>
+
+            <!-- Sumber data -->
+            <p class="text-center text-xs text-slate-400 mt-2 mb-6">
+                Sumber Data: <a href="https://sipd.kemendagri.go.id/penatausahaan/dashboard" target="_blank" rel="noopener" class="text-secondary hover:underline">https://sipd.kemendagri.go.id/penatausahaan/dashboard</a>
+            </p>
         </div>
     </div>
 
@@ -486,7 +490,6 @@
             renderTableHeader(dataArray);
             document.getElementById('tabel-search-bar').classList.remove('hidden');
             filterTable(); // render body awal (tanpa filter, keyword kosong)
-            renderJenisBelanjaChart(); // FIX A5
             document.getElementById('table-container').classList.remove('hidden');
         }
 
@@ -663,38 +666,6 @@
                 box.className = 'mt-2 text-xs rounded-lg px-3 py-2 bg-amber-50 text-amber-700 border border-amber-200';
                 box.innerHTML = `<i class="fas fa-triangle-exclamation mr-1"></i> Selisih ${formatRp(selisih)} antara Total tabel (${formatRp(tabelRealisasi)}) dan Ringkasan Eksekutif Master_Realisasi (${formatRp(master.realisasi)}) untuk bulan ${bulan}. Kemungkinan data di kedua sheet belum sinkron — perlu dicek manual, bukan berarti pasti salah.`;
             }
-        }
-
-        // FIX A5: kelompokkan Realisasi baris detail berdasarkan 2 segmen awal Kode Rekening
-        // (mis. "5.1.02.04.001.00001" -> "5.1"), lalu render sebagai donut chart.
-        let jenisChartInstance = null;
-        function renderJenisBelanjaChart() {
-            const totals = {};
-            for (let i = 3; i < currentBulanData.length; i++) {
-                const row = currentBulanData[i];
-                const kode = row[0] ? String(row[0]).trim() : "";
-                if (!getRowMeta(kode).isDetail) continue;
-                const segmen = kode.split('.').slice(0, 2).join('.') || 'Lainnya';
-                totals[segmen] = (totals[segmen] || 0) + parseNumber(row[3]);
-            }
-
-            const labels = Object.keys(totals);
-            const values = Object.values(totals);
-            const box = document.getElementById('jenis-belanja-box');
-
-            if (labels.length === 0) { box.classList.add('hidden'); return; }
-            box.classList.remove('hidden');
-
-            const palette = ['#3b82f6', '#f59e0b', '#10b981', '#ec4899', '#6366f1', '#14b8a6', '#f43f5e'];
-            if (jenisChartInstance) jenisChartInstance.destroy();
-            jenisChartInstance = new Chart(document.getElementById('jenisBelanjaChart'), {
-                type: 'doughnut',
-                data: { labels, datasets: [{ data: values, backgroundColor: palette.slice(0, labels.length) }] },
-                options: {
-                    responsive: true, maintainAspectRatio: false,
-                    plugins: { legend: { position: 'right', labels: { boxWidth: 12, font: { size: 11 } } } }
-                }
-            });
         }
 
         function clearTableSearch() {
