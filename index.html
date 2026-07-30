@@ -167,11 +167,12 @@
                                 <i class="fas fa-flask"></i> DATA SIMULASI — kolom "Realisasi PA/KPA" belum tersedia di Sheet
                             </span>
                         </div>
+                        <p class="text-[11px] text-slate-400 -mt-4 mb-3"><i class="fas fa-circle-info mr-1"></i>Klik salah satu kartu untuk melihat rincian LRA sesuai wewenangnya.</p>
                         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                            <div class="bg-indigo-50/50 border border-indigo-100 rounded-xl p-4"><p class="text-[10px] font-bold text-indigo-600 uppercase mb-1">PA</p><h4 id="val-pa" class="text-lg font-black text-indigo-700">-</h4></div>
-                            <div class="bg-teal-50/50 border border-teal-100 rounded-xl p-4"><p class="text-[10px] font-bold text-teal-600 uppercase mb-1">KPA 1</p><h4 id="val-kpa1" class="text-lg font-black text-teal-700">-</h4></div>
-                            <div class="bg-pink-50/50 border border-pink-100 rounded-xl p-4"><p class="text-[10px] font-bold text-pink-600 uppercase mb-1">KPA 2</p><h4 id="val-kpa2" class="text-lg font-black text-pink-700">-</h4></div>
-                            <div class="bg-amber-50/50 border border-amber-100 rounded-xl p-4"><p class="text-[10px] font-bold text-amber-600 uppercase mb-1">KPA 3</p><h4 id="val-kpa3" class="text-lg font-black text-amber-700">-</h4></div>
+                            <div onclick="filterByPaKpa('PA')" class="bg-indigo-50/50 border border-indigo-100 rounded-xl p-4 cursor-pointer hover:ring-2 hover:ring-indigo-300 transition"><p class="text-[10px] font-bold text-indigo-600 uppercase mb-1">PA</p><h4 id="val-pa" class="text-lg font-black text-indigo-700">-</h4></div>
+                            <div onclick="filterByPaKpa('KPA1')" class="bg-teal-50/50 border border-teal-100 rounded-xl p-4 cursor-pointer hover:ring-2 hover:ring-teal-300 transition"><p class="text-[10px] font-bold text-teal-600 uppercase mb-1">KPA 1</p><h4 id="val-kpa1" class="text-lg font-black text-teal-700">-</h4></div>
+                            <div onclick="filterByPaKpa('KPA2')" class="bg-pink-50/50 border border-pink-100 rounded-xl p-4 cursor-pointer hover:ring-2 hover:ring-pink-300 transition"><p class="text-[10px] font-bold text-pink-600 uppercase mb-1">KPA 2</p><h4 id="val-kpa2" class="text-lg font-black text-pink-700">-</h4></div>
+                            <div onclick="filterByPaKpa('KPA3')" class="bg-amber-50/50 border border-amber-100 rounded-xl p-4 cursor-pointer hover:ring-2 hover:ring-amber-300 transition"><p class="text-[10px] font-bold text-amber-600 uppercase mb-1">KPA 3</p><h4 id="val-kpa3" class="text-lg font-black text-amber-700">-</h4></div>
                         </div>
                         <div class="text-[11px] text-slate-400 leading-relaxed mb-6 space-y-0.5">
                             <p><span class="font-semibold text-slate-500">PA:</span> Khusus "Penyediaan Gaji dan Tunjangan ASN"</p>
@@ -218,6 +219,13 @@
 
                     <!-- FIX #2: Search box untuk filter tabel 317 baris berdasarkan Kode Rekening / Uraian -->
                     <div id="tabel-search-bar" class="hidden mb-4 no-print">
+                        <!-- FIX B: chip filter wewenang PA/KPA aktif, muncul kalau diklik dari tab Capaian PA/KPA -->
+                        <div id="pakpa-filter-chip" class="hidden items-center gap-2 mb-3">
+                            <span class="inline-flex items-center gap-1.5 bg-blue-100 text-blue-700 text-xs font-bold px-3 py-1.5 rounded-full">
+                                Filter wewenang: <span id="pakpa-filter-label"></span>
+                                <button onclick="clearPaKpaFilter()" class="ml-1 hover:text-blue-900"><i class="fas fa-xmark"></i></button>
+                            </span>
+                        </div>
                         <div class="relative max-w-md">
                             <i class="fas fa-search absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
                             <input type="text" id="tabelSearch" oninput="filterTable()" placeholder="Cari kode rekening atau uraian..."
@@ -365,6 +373,7 @@
 
                 const latestData = data[data.length - 1];
                 const totalPersen = parseNumber(getVal(latestData, 'Persentase'));
+                latestBulanName = getVal(latestData, 'Bulan') || ''; // FIX B: dipakai default bulan saat klik kartu PA/KPA
 
                 document.getElementById('val-pagu').textContent = formatRp(parseNumber(getVal(latestData, 'Pagu')));
                 document.getElementById('val-realisasi').textContent = formatRp(parseNumber(getVal(latestData, 'Realisasi')));
@@ -458,6 +467,7 @@
             document.getElementById('table-container').classList.add('hidden');
             document.getElementById('tabel-search-bar').classList.add('hidden');
             document.getElementById('tabelSearch').value = ''; // reset filter tiap ganti bulan
+            activePaKpaFilter = null; // FIX B: reset filter wewenang tiap ganti bulan manual
             document.getElementById('tabel-loading').classList.remove('hidden');
             document.getElementById('tabel-loading').classList.add('flex');
 
@@ -467,6 +477,7 @@
                 const data = await response.json();
 
                 if (data.error) { throw new Error(data.error); }
+                currentBulanName = bulan; // FIX B
                 renderTable(data);
             } catch (error) {
                 // FIX #1: ganti alert() (mengganggu & mudah diabaikan) dengan panel error yang menetap di halaman
@@ -482,10 +493,84 @@
         // FIX #2: data mentah bulan aktif disimpan di memori supaya search box bisa
         // memfilter ulang tanpa fetch ke Apps Script setiap kali user mengetik.
         let currentBulanData = [];
+        let currentBulanName = ''; // FIX B: bulan yang datanya sedang di-load ke currentBulanData
+        let latestBulanName = ''; // FIX B: bulan terakhir dari Master_Realisasi (default saat klik kartu PA/KPA)
+        let activePaKpaFilter = null; // FIX B: 'PA' | 'KPA1' | 'KPA2' | 'KPA3' | null
+        let currentBulanPaKpaMap = []; // FIX B: hasil klasifikasi PA/KPA per baris, sejajar index dengan currentBulanData
+
+        // FIX B: klasifikasi PA/KPA per baris detail, berdasarkan pemetaan resmi
+        // ("Master_Realisasi - Sheet4"). Kode Program/Kegiatan/Sub Kegiatan yang sama
+        // dipakai ulang oleh unit BKD induk maupun UPTD — jadi pembedanya BUKAN kode itu
+        // sendiri, melainkan baris "unit organisasi" di atasnya. Karena itu tabel dibaca
+        // berurutan dari atas ke bawah sambil "mengingat" sedang di bawah unit/kegiatan apa,
+        // bukan look-up satu kode ke satu kategori.
+        //
+        // CATATAN: pemetaan ini mengikuti struktur kode rekening tahun anggaran saat ini.
+        // Kalau struktur Program/Kegiatan berubah di tahun berikutnya, mapping ini perlu di-update.
+        const PA_SUBKEGIATAN = '5.03.01.1.02.0001';
+        const KPA2_EXCEPTION_SUBKEGIATAN = '5.03.02.1.01.0008';
+        const KPA2_KEGIATAN = ['5.03.02.1.02', '5.03.02.1.04'];
+        const UNIT_BKD_INDUK = '5.03.0.00.0.00.01.0000';
+        const UNIT_UPTD = '5.03.0.00.0.00.01.0002';
+
+        function computePaKpaMap(dataArray) {
+            const map = new Array(dataArray.length).fill(null);
+            let currentUnit = null;
+            let currentKegiatan = '';
+            let currentSubKegiatan = '';
+
+            for (let i = 3; i < dataArray.length; i++) {
+                const kode = dataArray[i][0] ? String(dataArray[i][0]).trim() : '';
+
+                if (kode === UNIT_BKD_INDUK) { currentUnit = 'BKD'; continue; }
+                if (kode === UNIT_UPTD) { currentUnit = 'UPTD'; continue; }
+                if (kode.length === 12) { currentKegiatan = kode; continue; }
+                if (kode.length >= 16 && kode.startsWith('5.03')) { currentSubKegiatan = kode; continue; }
+
+                if (!getRowMeta(kode).isDetail) continue; // lewati baris rekap lain (Program, dst.)
+
+                if (currentUnit === 'UPTD') { map[i] = 'KPA3'; continue; }
+                if (currentUnit !== 'BKD') continue; // unit belum teridentifikasi, biarkan null (aman)
+
+                if (currentSubKegiatan === PA_SUBKEGIATAN) { map[i] = 'PA'; continue; }
+                if (currentSubKegiatan === KPA2_EXCEPTION_SUBKEGIATAN) { map[i] = 'KPA2'; continue; }
+                if (KPA2_KEGIATAN.includes(currentKegiatan)) { map[i] = 'KPA2'; continue; }
+                if (currentKegiatan.startsWith('5.03.01') || currentKegiatan === '5.03.02.1.01' || currentKegiatan === '5.03.02.1.03') {
+                    map[i] = 'KPA1';
+                }
+            }
+            return map;
+        }
+
+        // FIX B: dipanggil saat kartu PA/KPA di tab "Capaian PA/KPA" diklik.
+        async function filterByPaKpa(kategori) {
+            switchTab('tabel');
+            const sel = document.getElementById('bulanSelector');
+            const targetBulan = sel.value || latestBulanName;
+
+            if (!targetBulan) {
+                alert('Data bulan belum tersedia. Coba lagi setelah Ringkasan Eksekutif selesai dimuat.');
+                return;
+            }
+
+            if (targetBulan !== currentBulanName) {
+                sel.value = targetBulan;
+                await fetchDetailBulan(); // ini juga mereset activePaKpaFilter ke null
+            }
+
+            activePaKpaFilter = kategori;
+            filterTable();
+        }
+
+        function clearPaKpaFilter() {
+            activePaKpaFilter = null;
+            filterTable();
+        }
 
         function renderTable(dataArray) {
             if (!Array.isArray(dataArray[0])) return;
             currentBulanData = dataArray;
+            currentBulanPaKpaMap = computePaKpaMap(dataArray); // FIX B
 
             renderTableHeader(dataArray);
             document.getElementById('tabel-search-bar').classList.remove('hidden');
@@ -587,6 +672,9 @@
 
                 if (keyword && !kodeRekening.includes(keyword) && !uraian.includes(keyword)) continue;
 
+                // FIX B: filter wewenang PA/KPA (kalau aktif) — dicek dari peta yang sudah dihitung sekali di renderTable
+                if (activePaKpaFilter && currentBulanPaKpaMap[i] !== activePaKpaFilter) continue;
+
                 matchCount++;
                 rows.push(buildRowHtml(row));
 
@@ -602,7 +690,7 @@
                 }
             }
 
-            tbody.innerHTML = rows.length ? rows.join('') : `<tr><td colspan="6" class="p-6 text-center text-slate-400">Tidak ada baris yang cocok dengan pencarian.</td></tr>`;
+            tbody.innerHTML = rows.length ? rows.join('') : `<tr><td colspan="6" class="p-6 text-center text-slate-400">Tidak ada baris yang cocok.</td></tr>`;
 
             if (detailCount > 0) {
                 const totalPersen = totalPagu > 0 ? (totalRealisasi / totalPagu * 100) : 0;
@@ -628,14 +716,28 @@
                 anomaliBox.classList.add('hidden'); anomaliBox.classList.remove('flex');
             }
 
+            // FIX B: chip filter wewenang PA/KPA
+            const paKpaChip = document.getElementById('pakpa-filter-chip');
+            if (activePaKpaFilter) {
+                document.getElementById('pakpa-filter-label').textContent = activePaKpaFilter;
+                paKpaChip.classList.remove('hidden'); paKpaChip.classList.add('flex');
+            } else {
+                paKpaChip.classList.add('hidden'); paKpaChip.classList.remove('flex');
+            }
+
             const totalRows = currentBulanData.length - 3;
-            document.getElementById('tabel-count').textContent = keyword
-                ? `Menampilkan ${matchCount} dari ${totalRows} baris untuk "${keyword}" — total dihitung dari ${detailCount} baris detail (baris rekap Program/Kegiatan/Sub Kegiatan tidak diikutkan agar tidak dobel-hitung)`
+            const filterDesc = [
+                keyword ? `kata kunci "${keyword}"` : null,
+                activePaKpaFilter ? `wewenang ${activePaKpaFilter}` : null
+            ].filter(Boolean).join(' & ');
+
+            document.getElementById('tabel-count').textContent = filterDesc
+                ? `Menampilkan ${matchCount} dari ${totalRows} baris untuk ${filterDesc} — total dihitung dari ${detailCount} baris detail (baris rekap Program/Kegiatan/Sub Kegiatan tidak diikutkan agar tidak dobel-hitung)`
                 : `Menampilkan seluruh ${totalRows} baris`;
 
             // FIX A4: rekonsiliasi hanya bermakna dibandingkan dengan total SATU BULAN PENUH,
-            // jadi hanya dihitung saat search box kosong (tidak sedang difilter sebagian).
-            if (!keyword) {
+            // jadi hanya dihitung saat tidak sedang difilter sama sekali (keyword maupun PA/KPA).
+            if (!keyword && !activePaKpaFilter) {
                 renderReconciliation(totalRealisasi, totalPagu, totalSisa);
             } else {
                 document.getElementById('reconciliation-box').classList.add('hidden');
