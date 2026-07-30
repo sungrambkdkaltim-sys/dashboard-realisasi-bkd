@@ -37,12 +37,19 @@
         /* ATURAN CETAK (PRINT CSS) */
         @media print {
             body * { visibility: hidden; }
-            #tab-tabel, #tab-tabel * { visibility: visible; }
-            #tab-tabel { position: absolute; left: 0; top: 0; width: 100%; box-shadow: none; border: none; padding: 0; margin: 0; }
+            /* FIX D: dua kemungkinan target cetak — tabel bulanan ATAU rincian PA/KPA.
+               Aman ditulis dua-duanya sekaligus: yang sedang tidak aktif (class "hidden",
+               display:none) tetap tidak akan tercetak walau visibility di-override di sini,
+               karena display:none selalu menang atas visibility. */
+            #tab-tabel, #tab-tabel *,
+            #pakpa-detail-section, #pakpa-detail-section * { visibility: visible; }
+            #tab-tabel, #pakpa-detail-section { position: absolute; left: 0; top: 0; width: 100%; box-shadow: none; border: none; padding: 0; margin: 0; }
             .no-print { display: none !important; }
             @page { size: landscape; margin: 10mm; }
             table { border-collapse: collapse; width: 100%; font-size: 11px; }
             th, td { border: 1px solid #000 !important; padding: 4px !important; }
+            /* Baris Kegiatan/Sub Kegiatan jangan terpotong di tengah saat pindah halaman */
+            #pakpa-detail-section details { break-inside: avoid; page-break-inside: avoid; }
             /* Memaksa warna background Excel agar ikut tercetak */
             * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
         }
@@ -158,7 +165,7 @@
                 </div>
 
                 <!-- Tab 4: PA/KPA -->
-                <div id="tab-pakpa" class="tab-content hidden no-print">
+                <div id="tab-pakpa" class="tab-content hidden">
                     <div class="max-w-5xl mx-auto fade-in">
                         <div class="flex items-center justify-between mb-6 flex-wrap gap-2">
                             <h3 class="text-xl font-bold text-slate-700">Distribusi Kewenangan PA & KPA <span class="text-xs font-normal text-slate-400">(Juta Rupiah)</span></h3>
@@ -169,10 +176,10 @@
                         </div>
                         <p class="text-[11px] text-slate-400 -mt-4 mb-3"><i class="fas fa-circle-info mr-1"></i>Klik salah satu kartu untuk melihat rincian LRA sesuai wewenangnya.</p>
                         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                            <div onclick="filterByPaKpa('PA')" class="bg-indigo-50/50 border border-indigo-100 rounded-xl p-4 cursor-pointer hover:ring-2 hover:ring-indigo-300 transition"><p class="text-[10px] font-bold text-indigo-600 uppercase mb-1">PA</p><h4 id="val-pa" class="text-lg font-black text-indigo-700">-</h4></div>
-                            <div onclick="filterByPaKpa('KPA1')" class="bg-teal-50/50 border border-teal-100 rounded-xl p-4 cursor-pointer hover:ring-2 hover:ring-teal-300 transition"><p class="text-[10px] font-bold text-teal-600 uppercase mb-1">KPA 1</p><h4 id="val-kpa1" class="text-lg font-black text-teal-700">-</h4></div>
-                            <div onclick="filterByPaKpa('KPA2')" class="bg-pink-50/50 border border-pink-100 rounded-xl p-4 cursor-pointer hover:ring-2 hover:ring-pink-300 transition"><p class="text-[10px] font-bold text-pink-600 uppercase mb-1">KPA 2</p><h4 id="val-kpa2" class="text-lg font-black text-pink-700">-</h4></div>
-                            <div onclick="filterByPaKpa('KPA3')" class="bg-amber-50/50 border border-amber-100 rounded-xl p-4 cursor-pointer hover:ring-2 hover:ring-amber-300 transition"><p class="text-[10px] font-bold text-amber-600 uppercase mb-1">KPA 3</p><h4 id="val-kpa3" class="text-lg font-black text-amber-700">-</h4></div>
+                            <div onclick="showPaKpaDetail('PA')" class="bg-indigo-50/50 border border-indigo-100 rounded-xl p-4 cursor-pointer hover:ring-2 hover:ring-indigo-300 transition"><p class="text-[10px] font-bold text-indigo-600 uppercase mb-1">PA</p><h4 id="val-pa" class="text-lg font-black text-indigo-700">-</h4></div>
+                            <div onclick="showPaKpaDetail('KPA1')" class="bg-teal-50/50 border border-teal-100 rounded-xl p-4 cursor-pointer hover:ring-2 hover:ring-teal-300 transition"><p class="text-[10px] font-bold text-teal-600 uppercase mb-1">KPA 1</p><h4 id="val-kpa1" class="text-lg font-black text-teal-700">-</h4></div>
+                            <div onclick="showPaKpaDetail('KPA2')" class="bg-pink-50/50 border border-pink-100 rounded-xl p-4 cursor-pointer hover:ring-2 hover:ring-pink-300 transition"><p class="text-[10px] font-bold text-pink-600 uppercase mb-1">KPA 2</p><h4 id="val-kpa2" class="text-lg font-black text-pink-700">-</h4></div>
+                            <div onclick="showPaKpaDetail('KPA3')" class="bg-amber-50/50 border border-amber-100 rounded-xl p-4 cursor-pointer hover:ring-2 hover:ring-amber-300 transition"><p class="text-[10px] font-bold text-amber-600 uppercase mb-1">KPA 3</p><h4 id="val-kpa3" class="text-lg font-black text-amber-700">-</h4></div>
                         </div>
                         <div class="text-[11px] text-slate-400 leading-relaxed mb-6 space-y-0.5">
                             <p><span class="font-semibold text-slate-500">PA:</span> Khusus "Penyediaan Gaji dan Tunjangan ASN"</p>
@@ -180,7 +187,54 @@
                             <p><span class="font-semibold text-slate-500">KPA 2:</span> Bidang Pembinaan ASN dan Bidang Mutasi ASN</p>
                             <p><span class="font-semibold text-slate-500">KPA 3:</span> UPTD Penilaian Kompetensi ASN</p>
                         </div>
-                        <div class="h-80 relative"><canvas id="paKpaChart"></canvas></div>
+                        <div class="h-80 relative">
+                            <canvas id="paKpaChart"></canvas>
+                        </div>
+
+                        <!-- FIX C: rincian LRA per wewenang, muncul inline di bawah chart (tidak pindah tab) -->
+                        <div id="pakpa-detail-section" class="hidden mt-8 border-t border-slate-200 pt-6">
+                            <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 mb-4 no-print">
+                                <h4 id="pakpa-detail-title" class="text-lg font-bold text-slate-700"></h4>
+                                <div class="flex items-center gap-2">
+                                    <select id="pakpaBulanSelector" onchange="loadPaKpaDetailBulan()" class="bg-white border border-slate-300 text-slate-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2 shadow-sm font-medium">
+                                        <option value="Januari">Januari</option>
+                                        <option value="Februari">Februari</option>
+                                        <option value="Maret">Maret</option>
+                                        <option value="April">April</option>
+                                        <option value="Mei">Mei</option>
+                                        <option value="Juni">Juni</option>
+                                        <option value="Juli">Juli</option>
+                                        <option value="Agustus">Agustus</option>
+                                        <option value="September">September</option>
+                                        <option value="Oktober">Oktober</option>
+                                        <option value="November">November</option>
+                                        <option value="Desember">Desember</option>
+                                    </select>
+                                    <!-- FIX D: tombol cetak khusus rincian PA/KPA -->
+                                    <button onclick="printPaKpaDetail()" class="bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg text-sm px-4 py-2 shadow transition flex items-center whitespace-nowrap">
+                                        <i class="fas fa-print mr-2"></i> Cetak
+                                    </button>
+                                    <button onclick="document.getElementById('pakpa-detail-section').classList.add('hidden')" class="text-slate-300 hover:text-slate-500 text-lg px-2" title="Tutup">
+                                        <i class="fas fa-xmark"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- FIX D: header khusus tampil saat dicetak (tersembunyi di layar) -->
+                            <div class="hidden print:block text-center mb-4">
+                                <p class="font-bold text-lg">REALISASI ANGGARAN TAHUN 2026</p>
+                                <p class="font-bold">BADAN KEPEGAWAIAN DAERAH PROVINSI KALIMANTAN TIMUR</p>
+                                <p id="pakpa-print-subtitle" class="mt-1"></p>
+                            </div>
+
+                            <div id="pakpa-detail-loading" class="hidden flex-col items-center justify-center py-8 no-print">
+                                <div class="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500 mb-2"></div>
+                                <p class="text-slate-500 text-sm">Memuat rincian...</p>
+                            </div>
+
+                            <div id="pakpa-detail-summary"></div>
+                            <div id="pakpa-detail-groups" class="text-sm"></div>
+                        </div>
                     </div>
                 </div>
 
@@ -219,13 +273,6 @@
 
                     <!-- FIX #2: Search box untuk filter tabel 317 baris berdasarkan Kode Rekening / Uraian -->
                     <div id="tabel-search-bar" class="hidden mb-4 no-print">
-                        <!-- FIX B: chip filter wewenang PA/KPA aktif, muncul kalau diklik dari tab Capaian PA/KPA -->
-                        <div id="pakpa-filter-chip" class="hidden items-center gap-2 mb-3">
-                            <span class="inline-flex items-center gap-1.5 bg-blue-100 text-blue-700 text-xs font-bold px-3 py-1.5 rounded-full">
-                                Filter wewenang: <span id="pakpa-filter-label"></span>
-                                <button onclick="clearPaKpaFilter()" class="ml-1 hover:text-blue-900"><i class="fas fa-xmark"></i></button>
-                            </span>
-                        </div>
                         <div class="relative max-w-md">
                             <i class="fas fa-search absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
                             <input type="text" id="tabelSearch" oninput="filterTable()" placeholder="Cari kode rekening atau uraian..."
@@ -467,7 +514,6 @@
             document.getElementById('table-container').classList.add('hidden');
             document.getElementById('tabel-search-bar').classList.add('hidden');
             document.getElementById('tabelSearch').value = ''; // reset filter tiap ganti bulan
-            activePaKpaFilter = null; // FIX B: reset filter wewenang tiap ganti bulan manual
             document.getElementById('tabel-loading').classList.remove('hidden');
             document.getElementById('tabel-loading').classList.add('flex');
 
@@ -493,12 +539,10 @@
         // FIX #2: data mentah bulan aktif disimpan di memori supaya search box bisa
         // memfilter ulang tanpa fetch ke Apps Script setiap kali user mengetik.
         let currentBulanData = [];
-        let currentBulanName = ''; // FIX B: bulan yang datanya sedang di-load ke currentBulanData
-        let latestBulanName = ''; // FIX B: bulan terakhir dari Master_Realisasi (default saat klik kartu PA/KPA)
-        let activePaKpaFilter = null; // FIX B: 'PA' | 'KPA1' | 'KPA2' | 'KPA3' | null
-        let currentBulanPaKpaMap = []; // FIX B: hasil klasifikasi PA/KPA per baris, sejajar index dengan currentBulanData
+        let currentBulanName = ''; // bulan yang datanya sedang di-load ke currentBulanData
+        let latestBulanName = ''; // bulan terakhir dari Master_Realisasi (default saat klik kartu PA/KPA)
 
-        // FIX B: klasifikasi PA/KPA per baris detail, berdasarkan pemetaan resmi
+        // FIX B/C: klasifikasi PA/KPA per baris detail, berdasarkan pemetaan resmi
         // ("Master_Realisasi - Sheet4"). Kode Program/Kegiatan/Sub Kegiatan yang sama
         // dipakai ulang oleh unit BKD induk maupun UPTD — jadi pembedanya BUKAN kode itu
         // sendiri, melainkan baris "unit organisasi" di atasnya. Karena itu tabel dibaca
@@ -513,64 +557,173 @@
         const UNIT_BKD_INDUK = '5.03.0.00.0.00.01.0000';
         const UNIT_UPTD = '5.03.0.00.0.00.01.0002';
 
-        function computePaKpaMap(dataArray) {
-            const map = new Array(dataArray.length).fill(null);
+        // FIX C: sama seperti klasifikasi PA/KPA per baris, tapi sekalian mengelompokkan baris yang cocok
+        // ke dalam struktur Kegiatan -> Sub Kegiatan (dengan subtotal masing-masing) supaya
+        // bisa ditampilkan berjenjang dan mudah dibaca, bukan daftar 300-an baris rata.
+        function computePaKpaBreakdown(dataArray, kategori) {
             let currentUnit = null;
-            let currentKegiatan = '';
-            let currentSubKegiatan = '';
+            let currentKegiatan = '', currentKegiatanNama = '';
+            let currentSubKegiatan = '', currentSubNama = '';
+            const groups = {}; // kodeKegiatan -> { nama, pagu, realisasi, sisa, subs: { kodeSub -> {...} } }
 
             for (let i = 3; i < dataArray.length; i++) {
-                const kode = dataArray[i][0] ? String(dataArray[i][0]).trim() : '';
+                const row = dataArray[i];
+                const kode = row[0] ? String(row[0]).trim() : '';
+                const uraian = row[1] ? String(row[1]).trim() : '';
 
                 if (kode === UNIT_BKD_INDUK) { currentUnit = 'BKD'; continue; }
                 if (kode === UNIT_UPTD) { currentUnit = 'UPTD'; continue; }
-                if (kode.length === 12) { currentKegiatan = kode; continue; }
-                if (kode.length >= 16 && kode.startsWith('5.03')) { currentSubKegiatan = kode; continue; }
+                if (kode.length === 12) { currentKegiatan = kode; currentKegiatanNama = uraian; continue; }
+                if (kode.length >= 16 && kode.startsWith('5.03')) { currentSubKegiatan = kode; currentSubNama = uraian; continue; }
 
-                if (!getRowMeta(kode).isDetail) continue; // lewati baris rekap lain (Program, dst.)
+                if (!getRowMeta(kode).isDetail) continue;
 
-                if (currentUnit === 'UPTD') { map[i] = 'KPA3'; continue; }
-                if (currentUnit !== 'BKD') continue; // unit belum teridentifikasi, biarkan null (aman)
-
-                if (currentSubKegiatan === PA_SUBKEGIATAN) { map[i] = 'PA'; continue; }
-                if (currentSubKegiatan === KPA2_EXCEPTION_SUBKEGIATAN) { map[i] = 'KPA2'; continue; }
-                if (KPA2_KEGIATAN.includes(currentKegiatan)) { map[i] = 'KPA2'; continue; }
-                if (currentKegiatan.startsWith('5.03.01') || currentKegiatan === '5.03.02.1.01' || currentKegiatan === '5.03.02.1.03') {
-                    map[i] = 'KPA1';
+                let cat = null;
+                if (currentUnit === 'UPTD') cat = 'KPA3';
+                else if (currentUnit === 'BKD') {
+                    if (currentSubKegiatan === PA_SUBKEGIATAN) cat = 'PA';
+                    else if (currentSubKegiatan === KPA2_EXCEPTION_SUBKEGIATAN) cat = 'KPA2';
+                    else if (KPA2_KEGIATAN.includes(currentKegiatan)) cat = 'KPA2';
+                    else if (currentKegiatan.startsWith('5.03.01') || currentKegiatan === '5.03.02.1.01' || currentKegiatan === '5.03.02.1.03') cat = 'KPA1';
                 }
+                if (cat !== kategori) continue;
+
+                const pagu = parseNumber(row[2]);
+                const realisasi = parseNumber(row[3]);
+                const sisa = parseNumber(row[4]);
+
+                if (!groups[currentKegiatan]) groups[currentKegiatan] = { nama: currentKegiatanNama, pagu: 0, realisasi: 0, sisa: 0, subs: {} };
+                const g = groups[currentKegiatan];
+                g.pagu += pagu; g.realisasi += realisasi; g.sisa += sisa;
+
+                if (!g.subs[currentSubKegiatan]) g.subs[currentSubKegiatan] = { nama: currentSubNama, pagu: 0, realisasi: 0, sisa: 0, rows: [] };
+                const s = g.subs[currentSubKegiatan];
+                s.pagu += pagu; s.realisasi += realisasi; s.sisa += sisa;
+                s.rows.push(row);
             }
-            return map;
+            return groups;
         }
 
-        // FIX B: dipanggil saat kartu PA/KPA di tab "Capaian PA/KPA" diklik.
-        async function filterByPaKpa(kategori) {
-            switchTab('tabel');
-            const sel = document.getElementById('bulanSelector');
-            const targetBulan = sel.value || latestBulanName;
+        // FIX C: dipanggil saat kartu PA/KPA diklik — tampil inline di bawah chart, tanpa pindah tab.
+        let pakpaDetailBulanData = [];
+        let pakpaDetailCategory = null;
 
-            if (!targetBulan) {
-                alert('Data bulan belum tersedia. Coba lagi setelah Ringkasan Eksekutif selesai dimuat.');
+        async function showPaKpaDetail(kategori) {
+            pakpaDetailCategory = kategori;
+            document.getElementById('pakpa-detail-section').classList.remove('hidden');
+            document.getElementById('pakpa-detail-title').textContent = `Rincian LRA — ${kategori}`;
+
+            const sel = document.getElementById('pakpaBulanSelector');
+            if (!sel.value) sel.value = latestBulanName || 'Januari';
+
+            await loadPaKpaDetailBulan();
+            document.getElementById('pakpa-detail-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        async function loadPaKpaDetailBulan() {
+            const bulan = document.getElementById('pakpaBulanSelector').value;
+            if (!bulan || !pakpaDetailCategory) return;
+
+            // FIX D: subtitle khusus untuk header halaman cetak
+            document.getElementById('pakpa-print-subtitle').textContent = `Rincian LRA — Wewenang ${pakpaDetailCategory} — Bulan ${bulan}`;
+
+            document.getElementById('pakpa-detail-loading').classList.remove('hidden');
+            document.getElementById('pakpa-detail-loading').classList.add('flex');
+            document.getElementById('pakpa-detail-groups').innerHTML = '';
+            document.getElementById('pakpa-detail-summary').innerHTML = '';
+
+            try {
+                const response = await fetch(SCRIPT_URL + "?bulan=" + encodeURIComponent(bulan));
+                if (!response.ok) throw new Error(`Server merespons status ${response.status}`);
+                const data = await response.json();
+                if (data.error) throw new Error(data.error);
+
+                pakpaDetailBulanData = data;
+                renderPaKpaDetail();
+            } catch (error) {
+                console.error('Gagal memuat rincian PA/KPA:', error);
+                document.getElementById('pakpa-detail-groups').innerHTML =
+                    `<p class="text-rose-500 text-sm p-4"><i class="fas fa-triangle-exclamation mr-1"></i>Gagal memuat data: ${escapeHtml(error.message)}</p>`;
+            } finally {
+                document.getElementById('pakpa-detail-loading').classList.add('hidden');
+                document.getElementById('pakpa-detail-loading').classList.remove('flex');
+            }
+        }
+
+        // FIX D: sebelum cetak, buka paksa semua <details> (Kegiatan & Sub Kegiatan) —
+        // di kertas tidak ada interaksi klik untuk expand/collapse, jadi semua harus
+        // sudah terbuka supaya isinya ikut tercetak.
+        function printPaKpaDetail() {
+            document.querySelectorAll('#pakpa-detail-section details').forEach(d => { d.open = true; });
+            window.print();
+        }
+
+        function renderPaKpaDetail() {
+            const groups = computePaKpaBreakdown(pakpaDetailBulanData, pakpaDetailCategory);
+            const container = document.getElementById('pakpa-detail-groups');
+            const kegiatanKodes = Object.keys(groups);
+
+            if (kegiatanKodes.length === 0) {
+                container.innerHTML = `<p class="text-slate-400 text-sm p-4">Tidak ada baris untuk ${pakpaDetailCategory} di bulan ini.</p>`;
                 return;
             }
 
-            if (targetBulan !== currentBulanName) {
-                sel.value = targetBulan;
-                await fetchDetailBulan(); // ini juga mereset activePaKpaFilter ke null
-            }
+            let totalPagu = 0, totalRealisasi = 0, totalSisa = 0;
+            let html = '';
 
-            activePaKpaFilter = kategori;
-            filterTable();
-        }
+            kegiatanKodes.forEach(kKode => {
+                const g = groups[kKode];
+                totalPagu += g.pagu; totalRealisasi += g.realisasi; totalSisa += g.sisa;
+                const persenG = g.pagu > 0 ? (g.realisasi / g.pagu * 100) : 0;
 
-        function clearPaKpaFilter() {
-            activePaKpaFilter = null;
-            filterTable();
+                let subHtml = '';
+                Object.keys(g.subs).forEach(sKode => {
+                    const s = g.subs[sKode];
+                    const persenS = s.pagu > 0 ? (s.realisasi / s.pagu * 100) : 0;
+                    const rowsHtml = s.rows.map(row => `
+                        <tr class="border-b border-slate-100 text-xs text-slate-600">
+                            <td class="p-1.5 pl-4">${escapeHtml(row[1])}</td>
+                            <td class="p-1.5 text-right">${escapeHtml(row[2])}</td>
+                            <td class="p-1.5 text-right">${escapeHtml(row[3])}</td>
+                            <td class="p-1.5 text-right">${escapeHtml(row[4])}</td>
+                            <td class="p-1.5 text-right">${escapeHtml(row[5])}</td>
+                        </tr>`).join('');
+
+                    subHtml += `
+                        <details class="border-l-2 border-emerald-200 ml-4 mb-1.5 bg-white rounded-r-lg">
+                            <summary class="cursor-pointer text-xs font-semibold text-emerald-700 bg-emerald-50 p-2 rounded-r-lg flex justify-between items-center gap-3">
+                                <span>${escapeHtml(s.nama || sKode)}</span>
+                                <span class="whitespace-nowrap">${formatRp(s.realisasi)} / ${formatRp(s.pagu)} <span class="text-emerald-500">(${persenS.toFixed(1)}%)</span></span>
+                            </summary>
+                            <table class="w-full mt-1"><tbody>${rowsHtml}</tbody></table>
+                        </details>`;
+                });
+
+                html += `
+                    <details class="border border-cyan-200 rounded-lg mb-2" open>
+                        <summary class="cursor-pointer bg-cyan-50 p-3 rounded-t-lg font-semibold text-cyan-800 flex justify-between items-center gap-3 text-sm">
+                            <span>${escapeHtml(g.nama || kKode)}</span>
+                            <span class="whitespace-nowrap">${formatRp(g.realisasi)} / ${formatRp(g.pagu)} <span class="text-cyan-500">(${persenG.toFixed(1)}%)</span></span>
+                        </summary>
+                        <div class="p-2">${subHtml}</div>
+                    </details>`;
+            });
+
+            container.innerHTML = html;
+
+            const persenTotal = totalPagu > 0 ? (totalRealisasi / totalPagu * 100) : 0;
+            document.getElementById('pakpa-detail-summary').innerHTML = `
+                <div class="flex flex-wrap gap-x-6 gap-y-1 text-sm font-semibold text-slate-700 bg-slate-100 rounded-lg p-3 mb-4">
+                    <span>Pagu: ${formatRp(totalPagu)}</span>
+                    <span>Realisasi: ${formatRp(totalRealisasi)}</span>
+                    <span>Sisa: ${formatRp(totalSisa)}</span>
+                    <span>Serapan: ${persenTotal.toFixed(2)}%</span>
+                </div>`;
         }
 
         function renderTable(dataArray) {
             if (!Array.isArray(dataArray[0])) return;
             currentBulanData = dataArray;
-            currentBulanPaKpaMap = computePaKpaMap(dataArray); // FIX B
 
             renderTableHeader(dataArray);
             document.getElementById('tabel-search-bar').classList.remove('hidden');
@@ -672,9 +825,6 @@
 
                 if (keyword && !kodeRekening.includes(keyword) && !uraian.includes(keyword)) continue;
 
-                // FIX B: filter wewenang PA/KPA (kalau aktif) — dicek dari peta yang sudah dihitung sekali di renderTable
-                if (activePaKpaFilter && currentBulanPaKpaMap[i] !== activePaKpaFilter) continue;
-
                 matchCount++;
                 rows.push(buildRowHtml(row));
 
@@ -716,28 +866,14 @@
                 anomaliBox.classList.add('hidden'); anomaliBox.classList.remove('flex');
             }
 
-            // FIX B: chip filter wewenang PA/KPA
-            const paKpaChip = document.getElementById('pakpa-filter-chip');
-            if (activePaKpaFilter) {
-                document.getElementById('pakpa-filter-label').textContent = activePaKpaFilter;
-                paKpaChip.classList.remove('hidden'); paKpaChip.classList.add('flex');
-            } else {
-                paKpaChip.classList.add('hidden'); paKpaChip.classList.remove('flex');
-            }
-
             const totalRows = currentBulanData.length - 3;
-            const filterDesc = [
-                keyword ? `kata kunci "${keyword}"` : null,
-                activePaKpaFilter ? `wewenang ${activePaKpaFilter}` : null
-            ].filter(Boolean).join(' & ');
-
-            document.getElementById('tabel-count').textContent = filterDesc
-                ? `Menampilkan ${matchCount} dari ${totalRows} baris untuk ${filterDesc} — total dihitung dari ${detailCount} baris detail (baris rekap Program/Kegiatan/Sub Kegiatan tidak diikutkan agar tidak dobel-hitung)`
+            document.getElementById('tabel-count').textContent = keyword
+                ? `Menampilkan ${matchCount} dari ${totalRows} baris untuk "${keyword}" — total dihitung dari ${detailCount} baris detail (baris rekap Program/Kegiatan/Sub Kegiatan tidak diikutkan agar tidak dobel-hitung)`
                 : `Menampilkan seluruh ${totalRows} baris`;
 
             // FIX A4: rekonsiliasi hanya bermakna dibandingkan dengan total SATU BULAN PENUH,
-            // jadi hanya dihitung saat tidak sedang difilter sama sekali (keyword maupun PA/KPA).
-            if (!keyword && !activePaKpaFilter) {
+            // jadi hanya dihitung saat search box kosong (tidak sedang difilter sebagian).
+            if (!keyword) {
                 renderReconciliation(totalRealisasi, totalPagu, totalSisa);
             } else {
                 document.getElementById('reconciliation-box').classList.add('hidden');
