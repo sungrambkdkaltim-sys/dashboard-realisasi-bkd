@@ -14,6 +14,11 @@
     <meta property="og:title" content="Dashboard Realisasi Anggaran BKD 2026">
     <meta property="og:description" content="Pantau realisasi anggaran BKD Provinsi Kalimantan Timur tahun 2026 — pagu, realisasi, sisa anggaran, dan rincian LRA bulanan.">
     <meta property="og:url" content="https://sungrambkdkaltim-sys.github.io/dashboard-realisasi-bkd/">
+    <!-- Logo BKD sebagai thumbnail saat link dibagikan. Ukuran file saat ini 5.2MB — sebaiknya
+         dikompres (mis. via tinypng.com) supaya preview link tidak lambat dimuat. -->
+    <meta property="og:image" content="https://sungrambkdkaltim-sys.github.io/dashboard-realisasi-bkd/logo-bkd.png">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://sungrambkdkaltim-sys.github.io/dashboard-realisasi-bkd/logo-bkd.png">
 
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
@@ -24,15 +29,72 @@
 
     <script>
         tailwind.config = {
+            darkMode: 'class', // FIX E: toggle manual via class "dark" di <html>, bukan otomatis ikut OS
             theme: { extend: { fontFamily: { sans: ['Outfit', 'sans-serif'] }, colors: { primary: '#1e3a8a', secondary: '#3b82f6', accent: '#10b981', bkd: '#0ea5e9', uptd: '#f59e0b' } } }
         }
     </script>
     <style>
-        body { background-color: #f1f5f9; }
+        body { background-color: #f1f5f9; transition: background-color 0.2s ease, color 0.2s ease; }
         .glass-card { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.4); box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05); transition: all 0.3s ease; }
         .fade-in { animation: fadeIn 0.6s ease-out forwards; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
         .tab-btn { transition: all 0.3s ease; }
+
+        /* FIX E: MODE GELAP (DASAR) — override langsung ke kelas Tailwind yang sudah dipakai
+           di seluruh halaman, jadi tidak perlu tambah "dark:" satu-satu di ratusan elemen.
+           Cakupan: kerangka halaman (body, kartu, teks, border, input) DAN semua badge/kartu/kode-warna
+           pastel (PA/KPA, baris tabel LRA, banner rekonsiliasi & anomali) — supaya tetap kontras
+           jelas di atas background gelap, bukan cuma warna solid Tailwind mentah yang jadi pudar. */
+        html.dark body { background-color: #0f172a; color: #e2e8f0; }
+        html.dark .glass-card { background: rgba(30, 41, 59, 0.95); border-color: rgba(51, 65, 85, 0.6); }
+        html.dark .bg-slate-50 { background-color: #1e293b !important; }
+        html.dark .bg-white { background-color: #1e293b !important; }
+        html.dark .text-slate-800 { color: #f1f5f9 !important; }
+        html.dark .text-slate-700 { color: #e2e8f0 !important; }
+        html.dark .text-slate-600 { color: #cbd5e1 !important; }
+        html.dark .text-slate-500 { color: #94a3b8 !important; }
+        html.dark .text-slate-400 { color: #64748b !important; }
+        html.dark .border-slate-300, html.dark .border-slate-400, html.dark .border-gray-100, html.dark .border-slate-200 { border-color: #334155 !important; }
+        html.dark select, html.dark input[type="text"] { background-color: #1e293b; color: #e2e8f0; border-color: #334155; }
+        html.dark .bg-slate-100 { background-color: #1e293b !important; }
+        html.dark ::placeholder { color: #64748b; }
+
+        /* FIX G: badge/kartu/baris pastel per warna — background jadi tint transparan gelap,
+           teks jadi 1-2 tingkat lebih terang supaya tetap kontras di atas background gelap. */
+        html.dark .bg-indigo-50\/50, html.dark .bg-indigo-100 { background-color: rgba(99,102,241,0.16) !important; }
+        html.dark .border-indigo-100 { border-color: rgba(99,102,241,0.35) !important; }
+        html.dark .text-indigo-600, html.dark .text-indigo-700 { color: #a5b4fc !important; }
+
+        html.dark .bg-teal-50\/50, html.dark .bg-teal-100 { background-color: rgba(20,184,166,0.16) !important; }
+        html.dark .border-teal-100 { border-color: rgba(20,184,166,0.35) !important; }
+        html.dark .text-teal-600, html.dark .text-teal-700 { color: #5eead4 !important; }
+
+        html.dark .bg-pink-50\/50, html.dark .bg-pink-100 { background-color: rgba(236,72,153,0.16) !important; }
+        html.dark .border-pink-100 { border-color: rgba(236,72,153,0.35) !important; }
+        html.dark .text-pink-600, html.dark .text-pink-700 { color: #f9a8d4 !important; }
+
+        html.dark .bg-amber-50\/50, html.dark .bg-amber-50, html.dark .bg-amber-100 { background-color: rgba(245,158,11,0.16) !important; }
+        html.dark .border-amber-100, html.dark .border-amber-200 { border-color: rgba(245,158,11,0.35) !important; }
+        html.dark .text-amber-500, html.dark .text-amber-600, html.dark .text-amber-700 { color: #fcd34d !important; }
+
+        html.dark .bg-orange-100 { background-color: rgba(249,115,22,0.18) !important; }
+
+        html.dark .bg-cyan-50, html.dark .bg-cyan-100 { background-color: rgba(6,182,212,0.16) !important; }
+        html.dark .border-cyan-200 { border-color: rgba(6,182,212,0.35) !important; }
+        html.dark .text-cyan-500, html.dark .text-cyan-800 { color: #67e8f9 !important; }
+
+        html.dark .bg-emerald-50, html.dark .bg-emerald-100 { background-color: rgba(16,185,129,0.16) !important; }
+        html.dark .border-emerald-200 { border-color: rgba(16,185,129,0.35) !important; }
+        html.dark .text-emerald-500, html.dark .text-emerald-600, html.dark .text-emerald-700 { color: #6ee7b7 !important; }
+
+        html.dark .bg-rose-50, html.dark .bg-rose-100 { background-color: rgba(244,63,94,0.16) !important; }
+        html.dark .border-rose-200 { border-color: rgba(244,63,94,0.35) !important; }
+        html.dark .text-rose-400, html.dark .text-rose-500, html.dark .text-rose-600, html.dark .text-rose-700 { color: #fda4af !important; }
+
+        html.dark .bg-gray-200 { background-color: #334155 !important; }
+        html.dark .bg-\[\#e5f5e0\] { background-color: rgba(16,185,129,0.16) !important; }
+
+        /* Tombol solid (Excel/Cetak/dsb.) sudah kontras sejak awal, sengaja tidak diubah */
 
         /* ATURAN CETAK (PRINT CSS) */
         @media print {
@@ -60,7 +122,13 @@
     <nav class="bg-gradient-to-r from-primary to-secondary text-white shadow-lg relative overflow-hidden no-print">
         <div class="max-w-7xl mx-auto px-6 py-5 flex justify-between items-center relative z-10">
             <div class="text-2xl font-bold flex items-center tracking-wide"><div class="bg-white/20 p-2 rounded-lg mr-3 backdrop-blur-sm"><i class="fas fa-chart-pie"></i></div>Realisasi Anggaran 2026</div>
-            <div class="text-sm font-medium bg-white/20 px-4 py-2 rounded-full hidden sm:block">Badan Kepegawaian Daerah Prov. Kaltim</div>
+            <div class="flex items-center gap-3">
+                <div class="text-sm font-medium bg-white/20 px-4 py-2 rounded-full hidden sm:block">Badan Kepegawaian Daerah Prov. Kaltim</div>
+                <!-- FIX E: toggle mode gelap/terang -->
+                <button onclick="toggleTheme()" class="bg-white/20 hover:bg-white/30 transition p-2.5 rounded-lg" title="Ganti mode gelap/terang">
+                    <i id="theme-icon" class="fas fa-moon"></i>
+                </button>
+            </div>
         </div>
     </nav>
 
@@ -371,7 +439,35 @@
             .replace(/>/g, "&gt;")
             .replace(/"/g, "&quot;");
 
-        Chart.defaults.font.family = "'Outfit', sans-serif"; Chart.defaults.color = '#64748b';
+        Chart.defaults.font.family = "'Outfit', sans-serif";
+
+        // FIX E: mode gelap/terang dasar. Preferensi disimpan di localStorage (situs statis
+        // biasa, bukan Claude Artifact, jadi localStorage aman dipakai di sini) — kalau belum
+        // pernah diatur, ikut preferensi OS pengguna sebagai default awal.
+        function applyChartTheme(isDark) {
+            Chart.defaults.color = isDark ? '#94a3b8' : '#64748b';
+            Chart.defaults.borderColor = isDark ? '#334155' : '#e2e8f0';
+            Object.values(mainChartInstances).forEach(c => c.update());
+        }
+
+        function initTheme() {
+            const stored = localStorage.getItem('theme');
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            const isDark = stored ? stored === 'dark' : prefersDark;
+            document.documentElement.classList.toggle('dark', isDark);
+            document.getElementById('theme-icon').className = isDark ? 'fas fa-sun' : 'fas fa-moon';
+            Chart.defaults.color = isDark ? '#94a3b8' : '#64748b';
+            Chart.defaults.borderColor = isDark ? '#334155' : '#e2e8f0';
+        }
+
+        function toggleTheme() {
+            const isDark = document.documentElement.classList.toggle('dark');
+            localStorage.setItem('theme', isDark ? 'dark' : 'light');
+            document.getElementById('theme-icon').className = isDark ? 'fas fa-sun' : 'fas fa-moon';
+            applyChartTheme(isDark);
+        }
+
+        initTheme(); // dipanggil sebelum chart pertama dibuat, supaya warnanya sudah benar sejak awal
 
         // FIX A4: simpan data Master_Realisasi per bulan (bukan cuma bulan terakhir) supaya
         // tabel rincian LRA bisa cek-silang totalnya terhadap Ringkasan Eksekutif untuk bulan manapun.
@@ -418,7 +514,14 @@
                     return key ? row[key] : 0;
                 };
 
-                const latestData = data[data.length - 1];
+                // FIX F: sebelumnya pakai data[data.length - 1] (baris terakhir array), yang keliru
+                // kalau sheet Master_Realisasi sudah terisi baris untuk bulan-bulan mendatang
+                // (mis. Agustus-Desember masih angka salinan/placeholder). Sekarang dicari baris
+                // yang namanya cocok dengan bulan kalender SAAT INI — lebih tahan terhadap itu.
+                const BULAN_ID = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+                const namaBulanSekarang = BULAN_ID[new Date().getMonth()];
+                let latestData = data.find(row => (getVal(row, 'Bulan') || '').toString().trim() === namaBulanSekarang);
+                if (!latestData) latestData = data[data.length - 1]; // fallback kalau bulan sekarang belum ada barisnya di sheet
                 const totalPersen = parseNumber(getVal(latestData, 'Persentase'));
                 latestBulanName = getVal(latestData, 'Bulan') || ''; // FIX B: dipakai default bulan saat klik kartu PA/KPA
 
@@ -450,10 +553,20 @@
                     badge.classList.add('hidden'); badge.classList.remove('flex');
                 }
 
-                document.getElementById('val-pa').textContent = formatRp(pa[pa.length - 1] * 1000000);
-                document.getElementById('val-kpa1').textContent = formatRp(k1[k1.length - 1] * 1000000);
-                document.getElementById('val-kpa2').textContent = formatRp(k2[k2.length - 1] * 1000000);
-                document.getElementById('val-kpa3').textContent = formatRp(k3[k3.length - 1] * 1000000);
+                // FIX G: bug yang sama seperti "Ringkasan Eksekutif" kemarin — sebelumnya kartu PA/KPA
+                // ambil elemen TERAKHIR array (pa[pa.length-1], dst.), padahal itu bisa jadi baris bulan
+                // mendatang yang masih placeholder. Sekarang dipakai index baris yang sama dengan
+                // latestData (bulan kalender berjalan) supaya konsisten dengan kartu di atasnya.
+                const latestIndex = data.indexOf(latestData);
+                const paLatest = pa[latestIndex] ?? pa[pa.length - 1] ?? 0;
+                const k1Latest = k1[latestIndex] ?? k1[k1.length - 1] ?? 0;
+                const k2Latest = k2[latestIndex] ?? k2[k2.length - 1] ?? 0;
+                const k3Latest = k3[latestIndex] ?? k3[k3.length - 1] ?? 0;
+
+                document.getElementById('val-pa').textContent = formatRp(paLatest * 1000000);
+                document.getElementById('val-kpa1').textContent = formatRp(k1Latest * 1000000);
+                document.getElementById('val-kpa2').textContent = formatRp(k2Latest * 1000000);
+                document.getElementById('val-kpa3').textContent = formatRp(k3Latest * 1000000);
 
                 // FIX A4: simpan Pagu/Realisasi/Sisa per bulan untuk rekonsiliasi dengan tabel detail
                 masterDataByBulan = {};
