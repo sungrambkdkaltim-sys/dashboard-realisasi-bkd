@@ -78,6 +78,7 @@
         html.dark .text-amber-500, html.dark .text-amber-600, html.dark .text-amber-700 { color: #fcd34d !important; }
 
         html.dark .bg-orange-100 { background-color: rgba(249,115,22,0.18) !important; }
+        html.dark .bg-orange-50 { background-color: rgba(249,115,22,0.1) !important; }
 
         html.dark .bg-cyan-50, html.dark .bg-cyan-100 { background-color: rgba(6,182,212,0.16) !important; }
         html.dark .border-cyan-200 { border-color: rgba(6,182,212,0.35) !important; }
@@ -93,6 +94,13 @@
 
         html.dark .bg-gray-200 { background-color: #334155 !important; }
         html.dark .bg-\[\#e5f5e0\] { background-color: rgba(16,185,129,0.16) !important; }
+
+        /* FIX H: header kolom tabel (bg-blue-200) & icon box kartu (bg-blue-100) terlewat sebelumnya —
+           teks jadi nyaris tak terlihat karena background tetap terang sementara warna teks sudah
+           dipaksa terang juga oleh override text-slate-800 di atas. */
+        html.dark .bg-blue-200 { background-color: rgba(59,130,246,0.35) !important; }
+        html.dark .bg-blue-100 { background-color: rgba(59,130,246,0.18) !important; }
+        html.dark .text-blue-600 { color: #93c5fd !important; }
 
         /* Tombol solid (Excel/Cetak/dsb.) sudah kontras sejak awal, sengaja tidak diubah */
 
@@ -225,10 +233,62 @@
                 </div>
 
                 <!-- Tab 3: Unit -->
-                <div id="tab-komparasi" class="tab-content hidden no-print">
+                <div id="tab-komparasi" class="tab-content hidden">
                     <div class="max-w-5xl mx-auto fade-in">
-                        <h3 class="text-xl font-bold text-slate-700 mb-8">Komparasi Beban Belanja Unit Kerja <span class="text-xs font-normal text-slate-400">(Juta Rupiah)</span></h3>
-                        <div class="h-80 relative"><canvas id="unitChart"></canvas></div>
+                        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 mb-2 no-print">
+                            <div>
+                                <h3 class="text-xl font-bold text-slate-700">Komparasi Beban Belanja per Bidang <span class="text-xs font-normal text-slate-400">(Juta Rupiah)</span></h3>
+                                <p class="text-[11px] text-slate-400 mt-1">Sekretariat, Bidang PPI ASN, Bidang Mutasi ASN, Bidang Pengembangan ASN, Bidang Pembinaan ASN, dan UPTD — untuk bulan yang dipilih.</p>
+                            </div>
+                            <select id="komparasiBulanSelector" onchange="loadKomparasiBidang()" class="bg-white border border-slate-300 text-slate-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2.5 shadow-sm font-medium">
+                                <option value="" disabled selected>-- Pilih Bulan --</option>
+                                <option value="Januari">Januari</option>
+                                <option value="Februari">Februari</option>
+                                <option value="Maret">Maret</option>
+                                <option value="April">April</option>
+                                <option value="Mei">Mei</option>
+                                <option value="Juni">Juni</option>
+                                <option value="Juli">Juli</option>
+                                <option value="Agustus">Agustus</option>
+                                <option value="September">September</option>
+                                <option value="Oktober">Oktober</option>
+                                <option value="November">November</option>
+                                <option value="Desember">Desember</option>
+                            </select>
+                        </div>
+                        <div id="komparasi-loading" class="hidden flex-col items-center justify-center py-8">
+                            <div class="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500 mb-2"></div>
+                            <p class="text-slate-500 text-sm">Memuat data bulan ini...</p>
+                        </div>
+                        <!-- FIX L: panel error, ganti alert() yang mengganggu -->
+                        <div id="komparasi-error" class="hidden text-center py-8 bg-rose-50 rounded-xl border border-dashed border-rose-200">
+                            <i class="fas fa-triangle-exclamation text-2xl text-rose-400 mb-2"></i>
+                            <p id="komparasi-error-msg" class="text-rose-500 text-sm"></p>
+                        </div>
+                        <div class="h-80 relative mt-6"><canvas id="unitChart"></canvas></div>
+
+                        <!-- FIX M: tabel ringkasan per Bidang, sesuai contoh format Anda -->
+                        <div class="overflow-x-auto mt-8">
+                            <table class="min-w-full text-sm border-collapse border border-slate-300">
+                                <thead>
+                                    <tr class="bg-orange-100 font-bold text-center">
+                                        <th class="p-2 border border-slate-300 text-left">Bidang</th>
+                                        <th class="p-2 border border-slate-300">Pagu</th>
+                                        <th class="p-2 border border-slate-300">Realisasi</th>
+                                        <th class="p-2 border border-slate-300">Sisa Anggaran</th>
+                                        <th class="p-2 border border-slate-300">%</th>
+                                    </tr>
+                                    <tr class="bg-orange-50 text-center text-xs text-slate-500">
+                                        <th class="p-1 border border-slate-300">(1)</th>
+                                        <th class="p-1 border border-slate-300">(2)</th>
+                                        <th class="p-1 border border-slate-300">(3)</th>
+                                        <th class="p-1 border border-slate-300">(4=2-3)</th>
+                                        <th class="p-1 border border-slate-300">(5=3/2)</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="komparasi-table-body"></tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
 
@@ -400,6 +460,13 @@
     <script>
         const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwBh-K_qneLNmjiqu13643WYKGKWOC0BfSuPcyRfGafO7gVtJXDOHsQ9lUZ7OpdNZ8/exec';
 
+        // FIX K: dipindah jadi utilitas global (sebelumnya cuma variabel lokal di dalam fetchData)
+        // supaya bisa dipakai di mana pun TANPA perlu menunggu fetchData() selesai — menghindari
+        // race condition saat tab lain (mis. Komparasi Bidang) di-deep-link langsung dan butuh
+        // "bulan berjalan" sebelum Master_Realisasi selesai di-fetch.
+        const BULAN_ID = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+        const getNamaBulanSekarang = () => BULAN_ID[new Date().getMonth()];
+
         // FIX #2: sinkronkan tab/bulan aktif ke query string URL, supaya link dashboard
         // bisa dibagikan langsung ke tab & bulan tertentu (mis. ?tab=tabel&bulan=Juli).
         // Pakai replaceState (bukan pushState) supaya tombol Back browser tidak dipenuhi
@@ -424,6 +491,13 @@
             document.getElementById('btn-' + tabId).classList.add('border-secondary', 'text-secondary');
 
             updateUrlState({ tab: tabId }); // FIX #2
+
+            // FIX J: lazy-load chart komparasi per Bidang saat tab ini pertama kali dibuka
+            if (tabId === 'komparasi' && !komparasiChartInstance) {
+                const sel = document.getElementById('komparasiBulanSelector');
+                if (!sel.value) sel.value = latestBulanName || getNamaBulanSekarang();
+                loadKomparasiBidang();
+            }
         }
 
         const formatRp = (angka) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(angka);
@@ -448,6 +522,7 @@
             Chart.defaults.color = isDark ? '#94a3b8' : '#64748b';
             Chart.defaults.borderColor = isDark ? '#334155' : '#e2e8f0';
             Object.values(mainChartInstances).forEach(c => c.update());
+            if (komparasiChartInstance) komparasiChartInstance.update(); // FIX J
         }
 
         function initTheme() {
@@ -518,9 +593,7 @@
                 // kalau sheet Master_Realisasi sudah terisi baris untuk bulan-bulan mendatang
                 // (mis. Agustus-Desember masih angka salinan/placeholder). Sekarang dicari baris
                 // yang namanya cocok dengan bulan kalender SAAT INI — lebih tahan terhadap itu.
-                const BULAN_ID = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
-                const namaBulanSekarang = BULAN_ID[new Date().getMonth()];
-                let latestData = data.find(row => (getVal(row, 'Bulan') || '').toString().trim() === namaBulanSekarang);
+                let latestData = data.find(row => (getVal(row, 'Bulan') || '').toString().trim() === getNamaBulanSekarang());
                 if (!latestData) latestData = data[data.length - 1]; // fallback kalau bulan sekarang belum ada barisnya di sheet
                 const totalPersen = parseNumber(getVal(latestData, 'Persentase'));
                 latestBulanName = getVal(latestData, 'Bulan') || ''; // FIX B: dipakai default bulan saat klik kartu PA/KPA
@@ -727,7 +800,7 @@
             document.getElementById('pakpa-detail-title').textContent = `Rincian LRA — ${kategori}`;
 
             const sel = document.getElementById('pakpaBulanSelector');
-            if (!sel.value) sel.value = latestBulanName || 'Januari';
+            if (!sel.value) sel.value = latestBulanName || getNamaBulanSekarang();
 
             await loadPaKpaDetailBulan();
             document.getElementById('pakpa-detail-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -837,11 +910,34 @@
         function renderTable(dataArray) {
             if (!Array.isArray(dataArray[0])) return;
             currentBulanData = dataArray;
+            currentAncestorMap = computeAncestorMap(dataArray); // FIX I
 
             renderTableHeader(dataArray);
             document.getElementById('tabel-search-bar').classList.remove('hidden');
             filterTable(); // render body awal (tanpa filter, keyword kosong)
             document.getElementById('table-container').classList.remove('hidden');
+        }
+
+        // FIX I: untuk setiap baris, catat index baris unit organisasi / Program / Kegiatan /
+        // Sub Kegiatan di ATASNYA (bukan isinya, cuma posisinya di array). Dipakai saat pencarian
+        // aktif supaya baris hasil pencarian tetap menampilkan "jalur" hierarkinya di atas —
+        // tanpa ini, user tidak tahu baris hasil cari itu masuk Program/Kegiatan apa.
+        let currentAncestorMap = [];
+        function computeAncestorMap(dataArray) {
+            const map = new Array(dataArray.length).fill(null);
+            let unitIdx = null, programIdx = null, kegiatanIdx = null, subIdx = null;
+
+            for (let i = 3; i < dataArray.length; i++) {
+                const kode = dataArray[i][0] ? String(dataArray[i][0]).trim() : '';
+
+                if (kode.startsWith('5.03.0.00')) { unitIdx = i; programIdx = null; kegiatanIdx = null; subIdx = null; continue; }
+                if (kode.length === 7) { programIdx = i; kegiatanIdx = null; subIdx = null; continue; }
+                if (kode.length === 12) { kegiatanIdx = i; subIdx = null; continue; }
+                if (kode.length >= 16 && kode.startsWith('5.03')) { subIdx = i; continue; }
+
+                map[i] = { unitIdx, programIdx, kegiatanIdx, subIdx };
+            }
+            return map;
         }
 
         function renderTableHeader(dataArray) {
@@ -924,7 +1020,7 @@
             const tfoot = document.getElementById('tabel-foot');
             if (!currentBulanData.length) return;
 
-            const rows = [];
+            const matchedIndices = [];
             let matchCount = 0;
             let detailCount = 0;
             let anomalyCount = 0; // FIX A2
@@ -939,7 +1035,7 @@
                 if (keyword && !kodeRekening.includes(keyword) && !uraian.includes(keyword)) continue;
 
                 matchCount++;
-                rows.push(buildRowHtml(row));
+                matchedIndices.push(i);
 
                 const meta = getRowMeta(kodeRekeningRaw);
                 if (meta.isDetail) {
@@ -952,6 +1048,28 @@
                     if (pagu > 0 && realisasi > pagu) anomalyCount++; // FIX A2
                 }
             }
+
+            // FIX I: kalau sedang difilter, sertakan juga baris Program/Kegiatan/Sub Kegiatan
+            // di atas tiap baris yang cocok, supaya kelihatan jelas belanja itu masuk di mana —
+            // bukan cuma daftar baris Belanja yang "mengambang" tanpa konteks.
+            let displayIndices;
+            if (keyword) {
+                const displaySet = new Set();
+                matchedIndices.forEach(idx => {
+                    const anc = currentAncestorMap[idx];
+                    if (anc) {
+                        if (anc.unitIdx !== null) displaySet.add(anc.unitIdx);
+                        if (anc.programIdx !== null) displaySet.add(anc.programIdx);
+                        if (anc.kegiatanIdx !== null) displaySet.add(anc.kegiatanIdx);
+                        if (anc.subIdx !== null) displaySet.add(anc.subIdx);
+                    }
+                    displaySet.add(idx);
+                });
+                displayIndices = [...displaySet].sort((a, b) => a - b);
+            } else {
+                displayIndices = matchedIndices;
+            }
+            const rows = displayIndices.map(idx => buildRowHtml(currentBulanData[idx]));
 
             tbody.innerHTML = rows.length ? rows.join('') : `<tr><td colspan="6" class="p-6 text-center text-slate-400">Tidak ada baris yang cocok.</td></tr>`;
 
@@ -981,7 +1099,7 @@
 
             const totalRows = currentBulanData.length - 3;
             document.getElementById('tabel-count').textContent = keyword
-                ? `Menampilkan ${matchCount} dari ${totalRows} baris untuk "${keyword}" — total dihitung dari ${detailCount} baris detail (baris rekap Program/Kegiatan/Sub Kegiatan tidak diikutkan agar tidak dobel-hitung)`
+                ? `${matchCount} baris cocok untuk "${keyword}" dari ${totalRows} baris (ditampilkan lengkap dengan baris Program/Kegiatan/Sub Kegiatan di atasnya sebagai konteks) — total dihitung dari ${detailCount} baris detail yang cocok saja, baris konteks tidak diikutkan agar tidak dobel-hitung`
                 : `Menampilkan seluruh ${totalRows} baris`;
 
             // FIX A4: rekonsiliasi hanya bermakna dibandingkan dengan total SATU BULAN PENUH,
@@ -1082,8 +1200,129 @@
             mainChartInstances.trend = new Chart(document.getElementById('trendChart'), { type: 'line', data: { labels, datasets: [{ data: rp, borderColor: '#3b82f6', backgroundColor: gr, fill: true, tension: 0.4 }] }, options: withDrilldown(opts, labels) });
             mainChartInstances.bar = new Chart(document.getElementById('barChart'), { type: 'bar', data: { labels, datasets: [{ data: persen, backgroundColor: '#10b981', borderRadius: 4 }] }, options: withDrilldown(opts, labels) });
             mainChartInstances.sCurve = new Chart(document.getElementById('sCurveChart'), { type: 'line', data: { labels, datasets: [{ data: target, borderColor: '#9ca3af', borderDash: [5,5] }, { data: aktual, borderColor: '#10b981', fill: true }] }, options: withDrilldown(opts, labels) });
-            mainChartInstances.unit = new Chart(document.getElementById('unitChart'), { type: 'bar', data: { labels, datasets: [{ data: bkd, backgroundColor: '#0ea5e9' }, { data: uptd, backgroundColor: '#f59e0b' }] }, options: withDrilldown({ ...opts, scales: { x: { stacked: false }, y: { stacked: false } } }, labels) });
+            // FIX J: unitChart (Realisasi per Unit) sekarang chart per-Bidang untuk 1 bulan,
+            // dimuat terpisah lewat loadKomparasiBidang() — bukan lagi bagian dari batch ini.
             mainChartInstances.paKpa = new Chart(document.getElementById('paKpaChart'), { type: 'bar', data: { labels, datasets: [{ data: pa, backgroundColor: '#6366f1' }, { data: k1, backgroundColor: '#14b8a6' }, { data: k2, backgroundColor: '#ec4899' }, { data: k3, backgroundColor: '#f59e0b' }] }, options: withDrilldown({ ...opts, scales: { x: { stacked: false }, y: { stacked: false } } }, labels) });
+        }
+
+        // FIX J: klasifikasi Bidang per baris detail — perluasan dari klasifikasi PA/KPA yang sudah
+        // ada (pakai konstanta UNIT_BKD_INDUK, UNIT_UPTD, KPA2_EXCEPTION_SUBKEGIATAN yang sama),
+        // berdasarkan kolom "PPTK Bidang" di dokumen pemetaan resmi.
+        const BIDANG_LIST = ['Sekretariat', 'PPI ASN', 'Mutasi ASN', 'Pengembangan ASN', 'Pembinaan ASN', 'UPTD'];
+
+        function classifyBidang(currentUnit, currentKegiatan, currentSubKegiatan) {
+            if (currentUnit === 'UPTD') return 'UPTD';
+            if (currentUnit !== 'BKD') return null;
+            if (currentKegiatan.startsWith('5.03.01')) return 'Sekretariat'; // PA + PPTK1 + PPTK2, semua di Program 5.03.01
+            if (currentSubKegiatan === KPA2_EXCEPTION_SUBKEGIATAN) return 'Pembinaan ASN'; // pengecualian: 5.03.02.1.01.0008
+            if (currentKegiatan === '5.03.02.1.01') return 'PPI ASN';
+            if (currentKegiatan === '5.03.02.1.03') return 'Pengembangan ASN';
+            if (currentKegiatan === '5.03.02.1.02') return 'Mutasi ASN';
+            if (currentKegiatan === '5.03.02.1.04') return 'Pembinaan ASN';
+            return null;
+        }
+
+        function computeBidangTotals(dataArray) {
+            let currentUnit = null, currentKegiatan = '', currentSubKegiatan = '';
+            const totals = {};
+            BIDANG_LIST.forEach(b => totals[b] = { pagu: 0, realisasi: 0 });
+
+            for (let i = 3; i < dataArray.length; i++) {
+                const row = dataArray[i];
+                const kode = row[0] ? String(row[0]).trim() : '';
+
+                if (kode === UNIT_BKD_INDUK) { currentUnit = 'BKD'; continue; }
+                if (kode === UNIT_UPTD) { currentUnit = 'UPTD'; continue; }
+                if (kode.length === 12) { currentKegiatan = kode; continue; }
+                if (kode.length >= 16 && kode.startsWith('5.03')) { currentSubKegiatan = kode; continue; }
+                if (!getRowMeta(kode).isDetail) continue;
+
+                const bidang = classifyBidang(currentUnit, currentKegiatan, currentSubKegiatan);
+                if (!bidang) continue;
+
+                totals[bidang].pagu += parseNumber(row[2]);
+                totals[bidang].realisasi += parseNumber(row[3]);
+            }
+            return totals;
+        }
+
+        async function loadKomparasiBidang() {
+            const bulan = document.getElementById('komparasiBulanSelector').value;
+            if (!bulan) return;
+
+            document.getElementById('komparasi-error').classList.add('hidden');
+            document.getElementById('komparasi-loading').classList.remove('hidden');
+            document.getElementById('komparasi-loading').classList.add('flex');
+
+            try {
+                const response = await fetch(SCRIPT_URL + "?bulan=" + encodeURIComponent(bulan));
+                if (!response.ok) throw new Error(`Server merespons status ${response.status}`);
+                const data = await response.json();
+                if (data.error) throw new Error(data.error);
+                renderKomparasiChart(data, bulan);
+            } catch (error) {
+                // FIX L: panel error inline, bukan alert() yang mengganggu & gampang tak disadari user
+                console.error('Gagal memuat komparasi Bidang:', error);
+                document.getElementById('komparasi-error-msg').textContent =
+                    `Gagal memuat data bulan ${bulan}: ${error.message}`;
+                document.getElementById('komparasi-error').classList.remove('hidden');
+            } finally {
+                document.getElementById('komparasi-loading').classList.add('hidden');
+                document.getElementById('komparasi-loading').classList.remove('flex');
+            }
+        }
+
+        let komparasiChartInstance = null;
+        function renderKomparasiChart(dataArray, bulan) {
+            const totals = computeBidangTotals(dataArray);
+            const labels = BIDANG_LIST;
+            const paguData = labels.map(b => totals[b].pagu / 1000000);
+            const realisasiData = labels.map(b => totals[b].realisasi / 1000000);
+
+            if (komparasiChartInstance) komparasiChartInstance.destroy();
+            komparasiChartInstance = new Chart(document.getElementById('unitChart'), {
+                type: 'bar',
+                data: { labels, datasets: [
+                    { label: 'Pagu', data: paguData, backgroundColor: '#cbd5e1' },
+                    { label: 'Realisasi', data: realisasiData, backgroundColor: '#0ea5e9' }
+                ]},
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: true, position: 'top' } } }
+            });
+
+            renderKomparasiTable(totals, bulan); // FIX M
+        }
+
+        // FIX M: tabel ringkasan per Bidang di bawah chart, formatnya mengikuti contoh yang diberikan —
+        // kolom Pagu/Realisasi/Sisa/% per Bidang, plus baris Total di baris terakhir.
+        function renderKomparasiTable(totals, bulan) {
+            let totalPagu = 0, totalRealisasi = 0;
+            const rowsHtml = BIDANG_LIST.map(bidang => {
+                const t = totals[bidang];
+                const sisa = t.pagu - t.realisasi;
+                const persen = t.pagu > 0 ? (t.realisasi / t.pagu * 100) : 0;
+                totalPagu += t.pagu; totalRealisasi += t.realisasi;
+                return `
+                    <tr class="border-b border-slate-200 hover:bg-slate-50">
+                        <td class="p-2 border border-slate-300 font-semibold">${escapeHtml(bidang)}</td>
+                        <td class="p-2 border border-slate-300 text-right">${formatNumber(t.pagu)}</td>
+                        <td class="p-2 border border-slate-300 text-right">${formatNumber(t.realisasi)}</td>
+                        <td class="p-2 border border-slate-300 text-right">${formatNumber(sisa)}</td>
+                        <td class="p-2 border border-slate-300 text-right">${persen.toFixed(2)}%</td>
+                    </tr>`;
+            }).join('');
+
+            const totalSisa = totalPagu - totalRealisasi;
+            const totalPersen = totalPagu > 0 ? (totalRealisasi / totalPagu * 100) : 0;
+            const totalRowHtml = `
+                <tr class="bg-slate-100 font-bold border-t-2 border-slate-400">
+                    <td class="p-2 border border-slate-300">Realisasi ${escapeHtml(bulan)} 2026</td>
+                    <td class="p-2 border border-slate-300 text-right">${formatNumber(totalPagu)}</td>
+                    <td class="p-2 border border-slate-300 text-right">${formatNumber(totalRealisasi)}</td>
+                    <td class="p-2 border border-slate-300 text-right">${formatNumber(totalSisa)}</td>
+                    <td class="p-2 border border-slate-300 text-right">${totalPersen.toFixed(2)}%</td>
+                </tr>`;
+
+            document.getElementById('komparasi-table-body').innerHTML = rowsHtml + totalRowHtml;
         }
 
         fetchData();
