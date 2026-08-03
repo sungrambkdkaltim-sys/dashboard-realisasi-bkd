@@ -62,8 +62,8 @@
         /* FIX G: badge/kartu/baris pastel per warna — background jadi tint transparan gelap,
            teks jadi 1-2 tingkat lebih terang supaya tetap kontras di atas background gelap. */
         html.dark .bg-indigo-50\/50, html.dark .bg-indigo-100 { background-color: rgba(99,102,241,0.16) !important; }
-        html.dark .border-indigo-100 { border-color: rgba(99,102,241,0.35) !important; }
-        html.dark .text-indigo-600, html.dark .text-indigo-700 { color: #a5b4fc !important; }
+        html.dark .border-indigo-100, html.dark .border-indigo-200 { border-color: rgba(99,102,241,0.35) !important; }
+        html.dark .text-indigo-600, html.dark .text-indigo-700, html.dark .text-indigo-800 { color: #a5b4fc !important; }
 
         html.dark .bg-teal-50\/50, html.dark .bg-teal-100 { background-color: rgba(20,184,166,0.16) !important; }
         html.dark .border-teal-100 { border-color: rgba(20,184,166,0.35) !important; }
@@ -743,14 +743,32 @@
         const UNIT_BKD_INDUK = '5.03.0.00.0.00.01.0000';
         const UNIT_UPTD = '5.03.0.00.0.00.01.0002';
 
-        // FIX C: sama seperti klasifikasi PA/KPA per baris, tapi sekalian mengelompokkan baris yang cocok
-        // ke dalam struktur Kegiatan -> Sub Kegiatan (dengan subtotal masing-masing) supaya
-        // bisa ditampilkan berjenjang dan mudah dibaca, bukan daftar 300-an baris rata.
+        // FIX O: klasifikasi PPTK — level di ANTARA wewenang PA/KPA dan Kegiatan, dipakai untuk
+        // bahan evaluasi/rapat (siapa PPTK penanggung jawab kegiatan apa). Berdasarkan kolom
+        // "PPTK Bidang" di dokumen pemetaan resmi. PA sendiri tidak punya nomor PPTK di dokumen
+        // (langsung di bawah PA), begitu juga KPA3/UPTD (seluruhnya "PPTK 7").
+        function classifyPptk(currentUnit, currentKegiatan, currentSubKegiatan) {
+            if (currentUnit === 'UPTD') return 'PPTK 7 — UPTD';
+            if (currentUnit !== 'BKD') return null;
+            if (currentSubKegiatan === PA_SUBKEGIATAN) return 'PA — Gaji ASN';
+            if (currentSubKegiatan === KPA2_EXCEPTION_SUBKEGIATAN) return 'PPTK 6 — Pembinaan ASN';
+            if (currentKegiatan === '5.03.01.1.01') return 'PPTK 1 — Sekretariat';
+            if (['5.03.01.1.02','5.03.01.1.03','5.03.01.1.06','5.03.01.1.08','5.03.01.1.09'].includes(currentKegiatan)) return 'PPTK 2 — Sekretariat';
+            if (currentKegiatan === '5.03.02.1.01') return 'PPTK 3 — PPI ASN';
+            if (currentKegiatan === '5.03.02.1.03') return 'PPTK 4 — Pengembangan ASN';
+            if (currentKegiatan === '5.03.02.1.02') return 'PPTK 5 — Mutasi ASN';
+            if (currentKegiatan === '5.03.02.1.04') return 'PPTK 6 — Pembinaan ASN';
+            return 'Lainnya';
+        }
+
+        // FIX C/O: sama seperti klasifikasi PA/KPA per baris, tapi sekalian mengelompokkan baris
+        // yang cocok ke dalam struktur berjenjang PPTK -> Kegiatan -> Sub Kegiatan (masing-masing
+        // dengan subtotal) supaya rapat evaluasi bisa langsung lihat siapa pegang kegiatan apa.
         function computePaKpaBreakdown(dataArray, kategori) {
             let currentUnit = null;
             let currentKegiatan = '', currentKegiatanNama = '';
             let currentSubKegiatan = '', currentSubNama = '';
-            const groups = {}; // kodeKegiatan -> { nama, pagu, realisasi, sisa, subs: { kodeSub -> {...} } }
+            const groups = {}; // labelPptk -> { pagu, realisasi, sisa, kegiatans: { kodeKegiatan -> {...} } }
 
             for (let i = 3; i < dataArray.length; i++) {
                 const row = dataArray[i];
@@ -774,12 +792,17 @@
                 }
                 if (cat !== kategori) continue;
 
+                const pptk = classifyPptk(currentUnit, currentKegiatan, currentSubKegiatan);
                 const pagu = parseNumber(row[2]);
                 const realisasi = parseNumber(row[3]);
                 const sisa = parseNumber(row[4]);
 
-                if (!groups[currentKegiatan]) groups[currentKegiatan] = { nama: currentKegiatanNama, pagu: 0, realisasi: 0, sisa: 0, subs: {} };
-                const g = groups[currentKegiatan];
+                if (!groups[pptk]) groups[pptk] = { pagu: 0, realisasi: 0, sisa: 0, kegiatans: {} };
+                const p = groups[pptk];
+                p.pagu += pagu; p.realisasi += realisasi; p.sisa += sisa;
+
+                if (!p.kegiatans[currentKegiatan]) p.kegiatans[currentKegiatan] = { nama: currentKegiatanNama, pagu: 0, realisasi: 0, sisa: 0, subs: {} };
+                const g = p.kegiatans[currentKegiatan];
                 g.pagu += pagu; g.realisasi += realisasi; g.sisa += sisa;
 
                 if (!g.subs[currentSubKegiatan]) g.subs[currentSubKegiatan] = { nama: currentSubNama, pagu: 0, realisasi: 0, sisa: 0, rows: [] };
@@ -844,12 +867,65 @@
             window.print();
         }
 
+        // FIX P: cetak/ekspor 1 blok PPTK saja, tanpa PPTK lain ikut tercetak.
+        // Caranya: sembunyikan sementara blok PPTK lain (inline style, bukan class, supaya
+        // tidak bentrok dengan CSS print yang sudah ada), buka semua <details> di dalam blok
+        // targetnya, cetak, lalu kembalikan tampilan semula setelah dialog print ditutup.
+        function printSinglePptk(pptkIndex) {
+            const allBlocks = document.querySelectorAll('.pptk-detail-block');
+            allBlocks.forEach((el, idx) => {
+                if (idx === pptkIndex) {
+                    el.style.display = '';
+                    el.querySelectorAll('details').forEach(d => { d.open = true; });
+                } else {
+                    el.style.display = 'none';
+                }
+            });
+
+            const restoreView = () => {
+                allBlocks.forEach(el => { el.style.display = ''; });
+                window.removeEventListener('afterprint', restoreView);
+            };
+            window.addEventListener('afterprint', restoreView);
+
+            window.print();
+        }
+
+        // FIX P: ekspor 1 blok PPTK saja ke Excel. Data dihitung ulang dari computePaKpaBreakdown
+        // (bukan simpan HTML), supaya angkanya rapi per kolom, bukan teks gabungan.
+        function exportSinglePptkToExcel(pptkIndex) {
+            const groups = computePaKpaBreakdown(pakpaDetailBulanData, pakpaDetailCategory);
+            const pptkLabels = Object.keys(groups);
+            const pptkLabel = pptkLabels[pptkIndex];
+            const p = groups[pptkLabel];
+            if (!p) return;
+
+            const bulan = document.getElementById('pakpaBulanSelector').value;
+            const aoa = [[`Rincian LRA — ${pptkLabel} — ${pakpaDetailCategory} — ${bulan} 2026`],
+                ['Kegiatan', 'Sub Kegiatan', 'Uraian Belanja', 'Pagu', 'Realisasi', 'Sisa', '%']];
+
+            Object.keys(p.kegiatans).forEach(kKode => {
+                const g = p.kegiatans[kKode];
+                Object.keys(g.subs).forEach(sKode => {
+                    const s = g.subs[sKode];
+                    s.rows.forEach(row => {
+                        aoa.push([g.nama, s.nama, row[1], parseNumber(row[2]), parseNumber(row[3]), parseNumber(row[4]), row[5]]);
+                    });
+                });
+            });
+
+            const ws = XLSX.utils.aoa_to_sheet(aoa);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, pptkLabel.replace(/[^\w\s—-]/g, '').substring(0, 31)); // nama sheet Excel maks 31 karakter
+            XLSX.writeFile(wb, `${pptkLabel.replace(/[^\w]+/g, '_')}_${bulan}_2026.xlsx`);
+        }
+
         function renderPaKpaDetail() {
             const groups = computePaKpaBreakdown(pakpaDetailBulanData, pakpaDetailCategory);
             const container = document.getElementById('pakpa-detail-groups');
-            const kegiatanKodes = Object.keys(groups);
+            const pptkLabels = Object.keys(groups);
 
-            if (kegiatanKodes.length === 0) {
+            if (pptkLabels.length === 0) {
                 container.innerHTML = `<p class="text-slate-400 text-sm p-4">Tidak ada baris untuk ${pakpaDetailCategory} di bulan ini.</p>`;
                 return;
             }
@@ -857,41 +933,68 @@
             let totalPagu = 0, totalRealisasi = 0, totalSisa = 0;
             let html = '';
 
-            kegiatanKodes.forEach(kKode => {
-                const g = groups[kKode];
-                totalPagu += g.pagu; totalRealisasi += g.realisasi; totalSisa += g.sisa;
-                const persenG = g.pagu > 0 ? (g.realisasi / g.pagu * 100) : 0;
+            // FIX O: level PPTK (terluar) — bahan evaluasi/rapat, biar langsung kelihatan
+            // siapa penanggung jawab kegiatan apa dan capaiannya.
+            pptkLabels.forEach((pptkLabel, pIdx) => {
+                const p = groups[pptkLabel];
+                totalPagu += p.pagu; totalRealisasi += p.realisasi; totalSisa += p.sisa;
+                const persenP = p.pagu > 0 ? (p.realisasi / p.pagu * 100) : 0;
+                const kegiatanKodes = Object.keys(p.kegiatans);
 
-                let subHtml = '';
-                Object.keys(g.subs).forEach(sKode => {
-                    const s = g.subs[sKode];
-                    const persenS = s.pagu > 0 ? (s.realisasi / s.pagu * 100) : 0;
-                    const rowsHtml = s.rows.map(row => `
-                        <tr class="border-b border-slate-100 text-xs text-slate-600">
-                            <td class="p-1.5 pl-4">${escapeHtml(row[1])}</td>
-                            <td class="p-1.5 text-right">${escapeHtml(row[2])}</td>
-                            <td class="p-1.5 text-right">${escapeHtml(row[3])}</td>
-                            <td class="p-1.5 text-right">${escapeHtml(row[4])}</td>
-                            <td class="p-1.5 text-right">${escapeHtml(row[5])}</td>
-                        </tr>`).join('');
+                let kegiatanHtml = '';
+                kegiatanKodes.forEach(kKode => {
+                    const g = p.kegiatans[kKode];
+                    const persenG = g.pagu > 0 ? (g.realisasi / g.pagu * 100) : 0;
 
-                    subHtml += `
-                        <details class="border-l-2 border-emerald-200 ml-4 mb-1.5 bg-white rounded-r-lg">
-                            <summary class="cursor-pointer text-xs font-semibold text-emerald-700 bg-emerald-50 p-2 rounded-r-lg flex justify-between items-center gap-3">
-                                <span>${escapeHtml(s.nama || sKode)}</span>
-                                <span class="whitespace-nowrap">${formatRp(s.realisasi)} / ${formatRp(s.pagu)} <span class="text-emerald-500">(${persenS.toFixed(1)}%)</span></span>
+                    let subHtml = '';
+                    Object.keys(g.subs).forEach(sKode => {
+                        const s = g.subs[sKode];
+                        const persenS = s.pagu > 0 ? (s.realisasi / s.pagu * 100) : 0;
+                        const rowsHtml = s.rows.map(row => `
+                            <tr class="border-b border-slate-100 text-xs text-slate-600">
+                                <td class="p-1.5 pl-4">${escapeHtml(row[1])}</td>
+                                <td class="p-1.5 text-right">${escapeHtml(row[2])}</td>
+                                <td class="p-1.5 text-right">${escapeHtml(row[3])}</td>
+                                <td class="p-1.5 text-right">${escapeHtml(row[4])}</td>
+                                <td class="p-1.5 text-right">${escapeHtml(row[5])}</td>
+                            </tr>`).join('');
+
+                        subHtml += `
+                            <details class="border-l-2 border-emerald-200 ml-4 mb-1.5 bg-white rounded-r-lg">
+                                <summary class="cursor-pointer text-xs font-semibold text-emerald-700 bg-emerald-50 p-2 rounded-r-lg flex justify-between items-center gap-3">
+                                    <span>${escapeHtml(s.nama || sKode)}</span>
+                                    <span class="whitespace-nowrap">${formatRp(s.realisasi)} / ${formatRp(s.pagu)} <span class="text-emerald-500">(${persenS.toFixed(1)}%)</span></span>
+                                </summary>
+                                <table class="w-full mt-1"><tbody>${rowsHtml}</tbody></table>
+                            </details>`;
+                    });
+
+                    kegiatanHtml += `
+                        <details class="border border-cyan-200 rounded-lg mb-2 ml-3" open>
+                            <summary class="cursor-pointer bg-cyan-50 p-3 rounded-t-lg font-semibold text-cyan-800 flex justify-between items-center gap-3 text-sm">
+                                <span>${escapeHtml(g.nama || kKode)}</span>
+                                <span class="whitespace-nowrap">${formatRp(g.realisasi)} / ${formatRp(g.pagu)} <span class="text-cyan-500">(${persenG.toFixed(1)}%)</span></span>
                             </summary>
-                            <table class="w-full mt-1"><tbody>${rowsHtml}</tbody></table>
+                            <div class="p-2">${subHtml}</div>
                         </details>`;
                 });
 
                 html += `
-                    <details class="border border-cyan-200 rounded-lg mb-2" open>
-                        <summary class="cursor-pointer bg-cyan-50 p-3 rounded-t-lg font-semibold text-cyan-800 flex justify-between items-center gap-3 text-sm">
-                            <span>${escapeHtml(g.nama || kKode)}</span>
-                            <span class="whitespace-nowrap">${formatRp(g.realisasi)} / ${formatRp(g.pagu)} <span class="text-cyan-500">(${persenG.toFixed(1)}%)</span></span>
+                    <details class="border-2 border-indigo-200 rounded-lg mb-3 pptk-detail-block" data-pptk-index="${pIdx}" open>
+                        <summary class="cursor-pointer bg-indigo-100 p-3 rounded-t-lg font-bold text-indigo-800 flex flex-wrap justify-between items-center gap-3">
+                            <span><i class="fas fa-user-tie mr-2"></i>${escapeHtml(pptkLabel)}</span>
+                            <span class="flex items-center gap-3">
+                                <span class="whitespace-nowrap">${formatRp(p.realisasi)} / ${formatRp(p.pagu)} <span class="text-indigo-500">(${persenP.toFixed(1)}%)</span></span>
+                                <!-- FIX P: cetak/ekspor PPTK ini saja. preventDefault+stopPropagation supaya klik tombol tidak ikut toggle buka/tutup <details> -->
+                                <button onclick="event.preventDefault(); event.stopPropagation(); exportSinglePptkToExcel(${pIdx});" class="no-print bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium px-3 py-1.5 rounded-lg shadow flex items-center gap-1.5">
+                                    <i class="fas fa-file-excel"></i> Excel
+                                </button>
+                                <button onclick="event.preventDefault(); event.stopPropagation(); printSinglePptk(${pIdx});" class="no-print bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium px-3 py-1.5 rounded-lg shadow flex items-center gap-1.5">
+                                    <i class="fas fa-print"></i> Cetak PPTK ini
+                                </button>
+                            </span>
                         </summary>
-                        <div class="p-2">${subHtml}</div>
+                        <div class="p-3">${kegiatanHtml}</div>
                     </details>`;
             });
 
