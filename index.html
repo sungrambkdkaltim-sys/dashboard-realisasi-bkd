@@ -983,7 +983,10 @@
             return { bgClass, fontClass, alignUraian, isDetail };
         }
 
-        function buildRowHtml(row) {
+        // FIX N: overrideTotals (opsional) dipakai saat pencarian aktif — baris konteks
+        // (Program/Kegiatan/Sub Kegiatan) akan menampilkan subtotal HASIL PENCARIAN saja
+        // (dihitung ulang), bukan total asli dari sheet yang mencakup semua anak di bawahnya.
+        function buildRowHtml(row, overrideTotals) {
             const kodeRekening = row[0] ? String(row[0]).trim() : "";
             let { bgClass, fontClass, alignUraian, isDetail } = getRowMeta(kodeRekening);
 
@@ -993,16 +996,29 @@
             const isAnomaly = isDetail && pagu > 0 && realisasi > pagu;
             if (isAnomaly) { bgClass = "bg-rose-100 ring-1 ring-inset ring-rose-400"; fontClass = "font-semibold"; }
 
+            const applyOverride = overrideTotals && !isDetail;
+            const ovSisa = applyOverride ? overrideTotals.pagu - overrideTotals.realisasi : 0;
+            const ovPersen = applyOverride && overrideTotals.pagu > 0 ? (overrideTotals.realisasi / overrideTotals.pagu * 100) : 0;
+
             let tr = `<tr class="${bgClass} ${fontClass} border-b border-slate-300 print:border-black hover:bg-yellow-50 transition-colors">`;
             for (let c = 0; c < 6; c++) {
-                let colData = row[c] !== undefined && row[c] !== null ? row[c] : '';
+                let colData;
+                if (applyOverride && c === 2) colData = formatNumber(overrideTotals.pagu);
+                else if (applyOverride && c === 3) colData = formatNumber(overrideTotals.realisasi);
+                else if (applyOverride && c === 4) colData = formatNumber(ovSisa);
+                else if (applyOverride && c === 5) colData = ovPersen.toFixed(2);
+                else colData = row[c] !== undefined && row[c] !== null ? row[c] : '';
+
                 let align = "text-left";
                 if (c >= 2) align = "text-right pr-2";
                 if (c === 0) align = "text-center";
                 if (c === 1) align = `text-left ${alignUraian}`;
                 // FIX A2: ikon peringatan kecil di kolom Uraian untuk baris anomali
                 if (c === 1 && isAnomaly) colData = `⚠ ${colData}`;
-                tr += `<td class="p-1.5 border border-slate-400 ${align}">${escapeHtml(colData)}</td>`; // FIX #4
+                // FIX N: escape dulu SEBELUM disisipi label, supaya tidak buka celah XSS (FIX #4)
+                let cellHtml = escapeHtml(colData);
+                if (c === 1 && applyOverride) cellHtml += ` <span class="text-[10px] font-normal opacity-60">(subtotal hasil cari)</span>`;
+                tr += `<td class="p-1.5 border border-slate-400 ${align}">${cellHtml}</td>`;
             }
             tr += `</tr>`;
             return tr;
@@ -1052,7 +1068,13 @@
             // FIX I: kalau sedang difilter, sertakan juga baris Program/Kegiatan/Sub Kegiatan
             // di atas tiap baris yang cocok, supaya kelihatan jelas belanja itu masuk di mana —
             // bukan cuma daftar baris Belanja yang "mengambang" tanpa konteks.
+            //
+            // FIX N: sekalian hitung ulang subtotal Pagu/Realisasi tiap baris konteks itu HANYA
+            // dari baris detail yang cocok pencarian (bukan pakai angka asli sheet yang mencakup
+            // semua anak di bawahnya) — supaya angka di baris konteks konsisten dengan apa yang
+            // benar-benar sedang ditampilkan ke user.
             let displayIndices;
+            const recalculated = {}; // idx baris konteks -> { pagu, realisasi }
             if (keyword) {
                 const displaySet = new Set();
                 matchedIndices.forEach(idx => {
@@ -1064,12 +1086,26 @@
                         if (anc.subIdx !== null) displaySet.add(anc.subIdx);
                     }
                     displaySet.add(idx);
+
+                    // Hanya baris detail (Belanja) yang nilainya diakumulasi ke atas
+                    const row = currentBulanData[idx];
+                    if (!getRowMeta(String(row[0]).trim()).isDetail) return;
+                    const pagu = parseNumber(row[2]);
+                    const realisasi = parseNumber(row[3]);
+                    if (anc) {
+                        [anc.unitIdx, anc.programIdx, anc.kegiatanIdx, anc.subIdx].forEach(ancIdx => {
+                            if (ancIdx === null || ancIdx === undefined) return;
+                            if (!recalculated[ancIdx]) recalculated[ancIdx] = { pagu: 0, realisasi: 0 };
+                            recalculated[ancIdx].pagu += pagu;
+                            recalculated[ancIdx].realisasi += realisasi;
+                        });
+                    }
                 });
                 displayIndices = [...displaySet].sort((a, b) => a - b);
             } else {
                 displayIndices = matchedIndices;
             }
-            const rows = displayIndices.map(idx => buildRowHtml(currentBulanData[idx]));
+            const rows = displayIndices.map(idx => buildRowHtml(currentBulanData[idx], recalculated[idx]));
 
             tbody.innerHTML = rows.length ? rows.join('') : `<tr><td colspan="6" class="p-6 text-center text-slate-400">Tidak ada baris yang cocok.</td></tr>`;
 
