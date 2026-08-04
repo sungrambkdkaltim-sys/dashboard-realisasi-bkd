@@ -467,6 +467,24 @@
         const BULAN_ID = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
         const getNamaBulanSekarang = () => BULAN_ID[new Date().getMonth()];
 
+        // FIX Q: coba ulang otomatis kalau fetch ke Apps Script gagal (mis. status 404/500 yang
+        // kadang muncul sesaat, atau hiccup jaringan) — sebelum menyerah dan menampilkan error ke user.
+        // Delay antar percobaan makin lama (backoff bertahap) supaya tidak membanjiri server kalau
+        // memang sedang bermasalah beneran.
+        async function fetchWithRetry(url, retries = 2, delayMs = 700) {
+            for (let attempt = 0; attempt <= retries; attempt++) {
+                try {
+                    const response = await fetch(url);
+                    if (!response.ok) throw new Error(`Server merespons status ${response.status}`);
+                    return await response.json();
+                } catch (err) {
+                    if (attempt === retries) throw err; // percobaan terakhir gagal, lempar error ke pemanggil
+                    console.warn(`Percobaan ${attempt + 1} gagal (${err.message}), coba lagi...`);
+                    await new Promise(r => setTimeout(r, delayMs * (attempt + 1)));
+                }
+            }
+        }
+
         // FIX #2: sinkronkan tab/bulan aktif ke query string URL, supaya link dashboard
         // bisa dibagikan langsung ke tab & bulan tertentu (mis. ?tab=tabel&bulan=Juli).
         // Pakai replaceState (bukan pushState) supaya tombol Back browser tidak dipenuhi
@@ -563,9 +581,7 @@
             }
 
             try {
-                const response = await fetch(SCRIPT_URL);
-                if (!response.ok) throw new Error(`Server merespons status ${response.status}`);
-                const raw = await response.json();
+                const raw = await fetchWithRetry(SCRIPT_URL);
 
                 const data = Array.isArray(raw) ? raw : raw.data;
                 const updatedAt = Array.isArray(raw) ? null : raw.updatedAt;
@@ -704,9 +720,7 @@
             document.getElementById('tabel-loading').classList.add('flex');
 
             try {
-                const response = await fetch(SCRIPT_URL + "?bulan=" + encodeURIComponent(bulan));
-                if (!response.ok) throw new Error(`Server merespons status ${response.status}`);
-                const data = await response.json();
+                const data = await fetchWithRetry(SCRIPT_URL + "?bulan=" + encodeURIComponent(bulan));
 
                 if (data.error) { throw new Error(data.error); }
                 currentBulanName = bulan; // FIX B
@@ -842,9 +856,7 @@
             document.getElementById('pakpa-detail-summary').innerHTML = '';
 
             try {
-                const response = await fetch(SCRIPT_URL + "?bulan=" + encodeURIComponent(bulan));
-                if (!response.ok) throw new Error(`Server merespons status ${response.status}`);
-                const data = await response.json();
+                const data = await fetchWithRetry(SCRIPT_URL + "?bulan=" + encodeURIComponent(bulan));
                 if (data.error) throw new Error(data.error);
 
                 pakpaDetailBulanData = data;
@@ -1394,9 +1406,7 @@
             document.getElementById('komparasi-loading').classList.add('flex');
 
             try {
-                const response = await fetch(SCRIPT_URL + "?bulan=" + encodeURIComponent(bulan));
-                if (!response.ok) throw new Error(`Server merespons status ${response.status}`);
-                const data = await response.json();
+                const data = await fetchWithRetry(SCRIPT_URL + "?bulan=" + encodeURIComponent(bulan));
                 if (data.error) throw new Error(data.error);
                 renderKomparasiChart(data, bulan);
             } catch (error) {
