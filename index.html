@@ -353,6 +353,13 @@
                                 <p class="font-bold text-lg">REALISASI ANGGARAN TAHUN 2026</p>
                                 <p class="font-bold">BADAN KEPEGAWAIAN DAERAH PROVINSI KALIMANTAN TIMUR</p>
                                 <p id="pakpa-print-subtitle" class="mt-1"></p>
+                                <!-- FIX R: legenda tingkatan, sekali di atas — supaya jelas dibaca di kertas -->
+                                <p class="text-xs mt-2 text-slate-600">
+                                    <span class="font-bold">Ungu</span> = PPTK &nbsp;•&nbsp;
+                                    <span class="font-bold">Biru muda</span> = Kegiatan &nbsp;•&nbsp;
+                                    <span class="font-bold">Hijau</span> = Sub Kegiatan &nbsp;•&nbsp;
+                                    setiap baris ringkasan berformat Pagu | Realisasi | Sisa | %
+                                </p>
                             </div>
 
                             <div id="pakpa-detail-loading" class="hidden flex-col items-center justify-center py-8 no-print">
@@ -971,21 +978,35 @@
                                 <td class="p-1.5 text-right">${escapeHtml(row[5])}</td>
                             </tr>`).join('');
 
+                        // FIX R: label eksplisit Pagu/Realisasi/Sisa/% (bukan lagi "Rp X / Rp Y (Z%)"
+                        // yang ambigu), dan tambah header kolom di tabel baris Belanja — supaya hasil
+                        // cetak tetap jelas dibaca tanpa konteks layar (warna/urutan) sama sekali.
                         subHtml += `
                             <details class="border-l-2 border-emerald-200 ml-4 mb-1.5 bg-white rounded-r-lg">
-                                <summary class="cursor-pointer text-xs font-semibold text-emerald-700 bg-emerald-50 p-2 rounded-r-lg flex justify-between items-center gap-3">
+                                <summary class="cursor-pointer text-xs font-semibold text-emerald-700 bg-emerald-50 p-2 rounded-r-lg flex flex-wrap justify-between items-center gap-x-4 gap-y-1">
                                     <span>${escapeHtml(s.nama || sKode)}</span>
-                                    <span class="whitespace-nowrap">${formatRp(s.realisasi)} / ${formatRp(s.pagu)} <span class="text-emerald-500">(${persenS.toFixed(1)}%)</span></span>
+                                    <span class="whitespace-nowrap font-normal text-[11px]">Pagu: ${formatRp(s.pagu)} &nbsp;|&nbsp; Realisasi: ${formatRp(s.realisasi)} &nbsp;|&nbsp; Sisa: ${formatRp(s.pagu - s.realisasi)} &nbsp;|&nbsp; <span class="font-semibold">${persenS.toFixed(1)}%</span></span>
                                 </summary>
-                                <table class="w-full mt-1"><tbody>${rowsHtml}</tbody></table>
+                                <table class="w-full mt-1 border-collapse">
+                                    <thead>
+                                        <tr class="bg-emerald-100 text-emerald-800 text-[10px] uppercase font-bold">
+                                            <th class="p-1.5 pl-4 text-left">Uraian Belanja</th>
+                                            <th class="p-1.5 text-right">Pagu</th>
+                                            <th class="p-1.5 text-right">Realisasi</th>
+                                            <th class="p-1.5 text-right">Sisa</th>
+                                            <th class="p-1.5 text-right">%</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>${rowsHtml}</tbody>
+                                </table>
                             </details>`;
                     });
 
                     kegiatanHtml += `
                         <details class="border border-cyan-200 rounded-lg mb-2 ml-3" open>
-                            <summary class="cursor-pointer bg-cyan-50 p-3 rounded-t-lg font-semibold text-cyan-800 flex justify-between items-center gap-3 text-sm">
+                            <summary class="cursor-pointer bg-cyan-50 p-3 rounded-t-lg font-semibold text-cyan-800 flex flex-wrap justify-between items-center gap-x-4 gap-y-1 text-sm">
                                 <span>${escapeHtml(g.nama || kKode)}</span>
-                                <span class="whitespace-nowrap">${formatRp(g.realisasi)} / ${formatRp(g.pagu)} <span class="text-cyan-500">(${persenG.toFixed(1)}%)</span></span>
+                                <span class="whitespace-nowrap font-normal text-xs">Pagu: ${formatRp(g.pagu)} &nbsp;|&nbsp; Realisasi: ${formatRp(g.realisasi)} &nbsp;|&nbsp; Sisa: ${formatRp(g.pagu - g.realisasi)} &nbsp;|&nbsp; <span class="font-semibold">${persenG.toFixed(1)}%</span></span>
                             </summary>
                             <div class="p-2">${subHtml}</div>
                         </details>`;
@@ -995,8 +1016,8 @@
                     <details class="border-2 border-indigo-200 rounded-lg mb-3 pptk-detail-block" data-pptk-index="${pIdx}" open>
                         <summary class="cursor-pointer bg-indigo-100 p-3 rounded-t-lg font-bold text-indigo-800 flex flex-wrap justify-between items-center gap-3">
                             <span><i class="fas fa-user-tie mr-2"></i>${escapeHtml(pptkLabel)}</span>
-                            <span class="flex items-center gap-3">
-                                <span class="whitespace-nowrap">${formatRp(p.realisasi)} / ${formatRp(p.pagu)} <span class="text-indigo-500">(${persenP.toFixed(1)}%)</span></span>
+                            <span class="flex items-center gap-3 flex-wrap">
+                                <span class="whitespace-nowrap font-normal text-xs">Pagu: ${formatRp(p.pagu)} &nbsp;|&nbsp; Realisasi: ${formatRp(p.realisasi)} &nbsp;|&nbsp; Sisa: ${formatRp(p.pagu - p.realisasi)} &nbsp;|&nbsp; <span class="font-bold">${persenP.toFixed(1)}%</span></span>
                                 <!-- FIX P: cetak/ekspor PPTK ini saja. preventDefault+stopPropagation supaya klik tombol tidak ikut toggle buka/tutup <details> -->
                                 <button onclick="event.preventDefault(); event.stopPropagation(); exportSinglePptkToExcel(${pIdx});" class="no-print bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium px-3 py-1.5 rounded-lg shadow flex items-center gap-1.5">
                                     <i class="fas fa-file-excel"></i> Excel
