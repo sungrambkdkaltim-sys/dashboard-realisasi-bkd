@@ -118,8 +118,18 @@
             @page { size: landscape; margin: 10mm; }
             table { border-collapse: collapse; width: 100%; font-size: 11px; }
             th, td { border: 1px solid #000 !important; padding: 4px !important; }
-            /* Baris Kegiatan/Sub Kegiatan jangan terpotong di tengah saat pindah halaman */
-            #pakpa-detail-section details { break-inside: avoid; page-break-inside: avoid; }
+            /* FIX S: "jangan terpotong" HANYA untuk blok Sub Kegiatan (pendek, wajar dijaga utuh).
+               Blok PPTK/Kegiatan sengaja TIDAK diberi aturan ini — kalau dipaksa utuh padahal
+               isinya panjang (banyak Kegiatan/Sub Kegiatan di dalamnya), browser malah mendorongnya
+               ke halaman baru lalu tetap kepotong juga, hasilnya banyak ruang kosong terbuang
+               (persis yang terjadi sebelumnya: judul PPTK sendirian di halaman, isinya baru
+               lanjut di halaman berikutnya). */
+            #pakpa-detail-section .subkegiatan-block { break-inside: avoid; page-break-inside: avoid; }
+            /* Baris tabel juga jangan sampai kepotong di tengah antar halaman */
+            #pakpa-detail-section tr { break-inside: avoid; page-break-inside: avoid; }
+            /* Judul (PPTK/Kegiatan/Sub Kegiatan) jangan jadi baris terakhir sendirian di ujung
+               halaman — usahakan minimal ikut pindah bareng sedikit isi di bawahnya */
+            #pakpa-detail-section summary { break-after: avoid-page; page-break-after: avoid; }
             /* Memaksa warna background Excel agar ikut tercetak */
             * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
         }
@@ -982,7 +992,7 @@
                         // yang ambigu), dan tambah header kolom di tabel baris Belanja — supaya hasil
                         // cetak tetap jelas dibaca tanpa konteks layar (warna/urutan) sama sekali.
                         subHtml += `
-                            <details class="border-l-2 border-emerald-200 ml-4 mb-1.5 bg-white rounded-r-lg">
+                            <details class="border-l-2 border-emerald-200 ml-4 mb-1.5 bg-white rounded-r-lg subkegiatan-block">
                                 <summary class="cursor-pointer text-xs font-semibold text-emerald-700 bg-emerald-50 p-2 rounded-r-lg flex flex-wrap justify-between items-center gap-x-4 gap-y-1">
                                     <span>${escapeHtml(s.nama || sKode)}</span>
                                     <span class="whitespace-nowrap font-normal text-[11px]">Pagu: ${formatRp(s.pagu)} &nbsp;|&nbsp; Realisasi: ${formatRp(s.realisasi)} &nbsp;|&nbsp; Sisa: ${formatRp(s.pagu - s.realisasi)} &nbsp;|&nbsp; <span class="font-semibold">${persenS.toFixed(1)}%</span></span>
