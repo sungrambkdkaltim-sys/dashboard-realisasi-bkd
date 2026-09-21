@@ -139,7 +139,7 @@
 
     <nav class="bg-gradient-to-r from-primary to-secondary text-white shadow-lg relative overflow-hidden no-print">
         <div class="max-w-7xl mx-auto px-6 py-5 flex justify-between items-center relative z-10">
-            <div class="text-2xl font-bold flex items-center tracking-wide"><div class="bg-white/20 p-2 rounded-lg mr-3 backdrop-blur-sm"><i class="fas fa-chart-pie"></i></div>Realisasi Anggaran 2026</div>
+            <div class="text-2xl font-bold flex items-center tracking-wide"><div class="bg-white/20 p-2 rounded-lg mr-3 backdrop-blur-sm"><i class="fas fa-chart-pie"></i></div>Realisasi Anggaran <span id="tahun-label">2026</span></div>
             <div class="flex items-center gap-3">
                 <div class="text-sm font-medium bg-white/20 px-4 py-2 rounded-full hidden sm:block">Badan Kepegawaian Daerah Prov. Kaltim</div>
                 <!-- FIX E: toggle mode gelap/terang -->
@@ -171,7 +171,11 @@
 
         <div id="main-content" class="hidden fade-in">
             <div class="flex justify-between items-end mb-6 no-print">
-                <div><h2 class="text-2xl font-bold text-slate-800">Ringkasan Eksekutif</h2></div>
+                <div class="flex items-center gap-3">
+                    <h2 class="text-2xl font-bold text-slate-800">Ringkasan Eksekutif</h2>
+                    <!-- FIX V: selector Tahun global — mengendalikan seluruh dashboard (semua tab & chart) -->
+                    <select id="tahunSelector" onchange="changeTahun()" class="bg-white border border-slate-300 text-slate-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 px-3 py-1.5 shadow-sm font-bold"></select>
+                </div>
                 <div class="flex items-center gap-4">
                     <!-- FIX A1: toggle auto-refresh, default mati supaya tidak mengejutkan pengguna biasa -->
                     <label class="flex items-center gap-2 text-xs text-slate-400 cursor-pointer select-none">
@@ -360,7 +364,7 @@
 
                             <!-- FIX D: header khusus tampil saat dicetak (tersembunyi di layar) -->
                             <div class="hidden print:block text-center mb-4">
-                                <p class="font-bold text-lg">REALISASI ANGGARAN TAHUN 2026</p>
+                                <p id="pakpa-print-title" class="font-bold text-lg">REALISASI ANGGARAN TAHUN 2026</p>
                                 <p class="font-bold">BADAN KEPEGAWAIAN DAERAH PROVINSI KALIMANTAN TIMUR</p>
                                 <p id="pakpa-print-subtitle" class="mt-1"></p>
                                 <!-- FIX R: legenda tingkatan, sekali di atas — supaya jelas dibaca di kertas -->
@@ -484,6 +488,20 @@
         const BULAN_ID = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
         const getNamaBulanSekarang = () => BULAN_ID[new Date().getMonth()];
 
+        // FIX V: dukungan multi-tahun. currentTahun adalah state GLOBAL — satu selector di
+        // Ringkasan Eksekutif mengendalikan seluruh dashboard (semua tab, semua chart).
+        // TAHUN_TERSEDIA dipakai untuk isi dropdown; tambah tahun baru cukup tambah di sini
+        // (setelah sheet-nya dibuat di Google Sheets, lihat catatan di Code.gs).
+        const TAHUN_TERSEDIA = ['2025', '2026'];
+        let currentTahun = '2026';
+
+        // Semua request ke Apps Script HARUS lewat sini, supaya parameter tahun otomatis
+        // ikut terkirim — tidak perlu tambah manual di tiap tempat yang fetch.
+        function buildScriptUrl(params) {
+            const usp = new URLSearchParams({ tahun: currentTahun, ...params });
+            return SCRIPT_URL + '?' + usp.toString();
+        }
+
         // FIX Q: coba ulang otomatis kalau fetch ke Apps Script gagal (mis. status 404/500 yang
         // kadang muncul sesaat, atau hiccup jaringan) — sebelum menyerah dan menampilkan error ke user.
         // Delay antar percobaan makin lama (backoff bertahap) supaya tidak membanjiri server kalau
@@ -513,6 +531,41 @@
             });
             const query = params.toString();
             history.replaceState(null, '', query ? `${window.location.pathname}?${query}` : window.location.pathname);
+        }
+
+        // FIX V: isi dropdown Tahun dari TAHUN_TERSEDIA (terbaru duluan), lalu pilih currentTahun.
+        function initTahunSelector() {
+            const sel = document.getElementById('tahunSelector');
+            sel.innerHTML = [...TAHUN_TERSEDIA].sort((a, b) => b - a)
+                .map(t => `<option value="${t}">${t}</option>`).join('');
+            sel.value = currentTahun;
+        }
+
+        // FIX V: dipanggil saat dropdown Tahun diganti. Me-refresh SEMUA bagian dashboard yang
+        // sedang aktif/terbuka dengan tahun baru — bukan cuma Ringkasan Eksekutif, supaya tidak
+        // ada bagian yang "ketinggalan" menampilkan data tahun lama.
+        async function changeTahun() {
+            currentTahun = document.getElementById('tahunSelector').value;
+            document.getElementById('tahun-label').textContent = currentTahun;
+            document.title = `Dashboard Realisasi Anggaran BKD ${currentTahun}`;
+            updateUrlState({ tahun: currentTahun });
+
+            // Data per-bulan dari tahun sebelumnya sudah tidak relevan, harus dihitung ulang.
+            masterDataByBulan = {};
+            latestBulanName = '';
+
+            // Refresh Ringkasan Eksekutif + chart utama (Overview/Kurva Target/Capaian PA-KPA atas)
+            await fetchData();
+
+            // Kalau tab Rincian LRA sedang/pernah menampilkan suatu bulan, muat ulang bulan yang
+            // sama untuk tahun baru (kalau tidak ada datanya, nanti tampil pesan error seperti biasa).
+            if (currentBulanName) { await fetchDetailBulan(); }
+
+            // Sama untuk section rincian PA/KPA yang sedang terbuka.
+            if (pakpaDetailCategory) { await loadPaKpaDetailBulan(); }
+
+            // Sama untuk chart Komparasi per Bidang.
+            if (komparasiChartInstance) { await loadKomparasiBidang(); }
         }
 
         function switchTab(tabId) {
@@ -598,7 +651,7 @@
             }
 
             try {
-                const raw = await fetchWithRetry(SCRIPT_URL);
+                const raw = await fetchWithRetry(buildScriptUrl({}));
 
                 const data = Array.isArray(raw) ? raw : raw.data;
                 const updatedAt = Array.isArray(raw) ? null : raw.updatedAt;
@@ -626,8 +679,14 @@
                 // kalau sheet Master_Realisasi sudah terisi baris untuk bulan-bulan mendatang
                 // (mis. Agustus-Desember masih angka salinan/placeholder). Sekarang dicari baris
                 // yang namanya cocok dengan bulan kalender SAAT INI — lebih tahan terhadap itu.
-                let latestData = data.find(row => (getVal(row, 'Bulan') || '').toString().trim() === getNamaBulanSekarang());
-                if (!latestData) latestData = data[data.length - 1]; // fallback kalau bulan sekarang belum ada barisnya di sheet
+                // FIX V: logika "bulan berjalan" itu HANYA relevan kalau currentTahun memang tahun
+                // kalender sekarang. Untuk tahun lain (mis. 2025, sudah lewat/selesai), langsung
+                // pakai baris terakhir sheet-nya (asumsinya sudah lengkap 12 bulan).
+                const isTahunBerjalan = String(new Date().getFullYear()) === currentTahun;
+                let latestData = isTahunBerjalan
+                    ? data.find(row => (getVal(row, 'Bulan') || '').toString().trim() === getNamaBulanSekarang())
+                    : null;
+                if (!latestData) latestData = data[data.length - 1]; // fallback: baris terakhir sheet
                 const totalPersen = parseNumber(getVal(latestData, 'Persentase'));
                 latestBulanName = getVal(latestData, 'Bulan') || ''; // FIX B: dipakai default bulan saat klik kartu PA/KPA
 
@@ -737,7 +796,7 @@
             document.getElementById('tabel-loading').classList.add('flex');
 
             try {
-                const data = await fetchWithRetry(SCRIPT_URL + "?bulan=" + encodeURIComponent(bulan));
+                const data = await fetchWithRetry(buildScriptUrl({ bulan }));
 
                 if (data.error) { throw new Error(data.error); }
                 currentBulanName = bulan; // FIX B
@@ -865,7 +924,8 @@
             if (!bulan || !pakpaDetailCategory) return;
 
             // FIX D: subtitle khusus untuk header halaman cetak
-            document.getElementById('pakpa-print-subtitle').textContent = `Rincian LRA — Wewenang ${pakpaDetailCategory} — Bulan ${bulan}`;
+            document.getElementById('pakpa-print-title').textContent = `REALISASI ANGGARAN TAHUN ${currentTahun}`;
+            document.getElementById('pakpa-print-subtitle').textContent = `Rincian LRA — Wewenang ${pakpaDetailCategory} — Bulan ${bulan} ${currentTahun}`;
 
             document.getElementById('pakpa-detail-loading').classList.remove('hidden');
             document.getElementById('pakpa-detail-loading').classList.add('flex');
@@ -873,7 +933,7 @@
             document.getElementById('pakpa-detail-summary').innerHTML = '';
 
             try {
-                const data = await fetchWithRetry(SCRIPT_URL + "?bulan=" + encodeURIComponent(bulan));
+                const data = await fetchWithRetry(buildScriptUrl({ bulan }));
                 if (data.error) throw new Error(data.error);
 
                 pakpaDetailBulanData = data;
@@ -930,7 +990,7 @@
             if (!p) return;
 
             const bulan = document.getElementById('pakpaBulanSelector').value;
-            const aoa = [[`Rincian LRA — ${pptkLabel} — ${pakpaDetailCategory} — ${bulan} 2026`],
+            const aoa = [[`Rincian LRA — ${pptkLabel} — ${pakpaDetailCategory} — ${bulan} ${currentTahun}`],
                 ['Kegiatan', 'Sub Kegiatan', 'Uraian Belanja', 'Pagu', 'Realisasi', 'Sisa', '%']];
 
             Object.keys(p.kegiatans).forEach(kKode => {
@@ -946,7 +1006,7 @@
             const ws = XLSX.utils.aoa_to_sheet(aoa);
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, pptkLabel.replace(/[^\w\s—-]/g, '').substring(0, 31)); // nama sheet Excel maks 31 karakter
-            XLSX.writeFile(wb, `${pptkLabel.replace(/[^\w]+/g, '_')}_${bulan}_2026.xlsx`);
+            XLSX.writeFile(wb, `${pptkLabel.replace(/[^\w]+/g, '_')}_${bulan}_${currentTahun}.xlsx`);
         }
 
         function renderPaKpaDetail() {
@@ -1090,7 +1150,7 @@
             const thead = document.getElementById('tabel-head');
 
             // Baris 1: Judul LRA
-            let htmlHead = `<tr><th colspan="6" class="text-center font-bold text-lg pt-4 pb-1 border-x border-t border-slate-400 bg-white">${escapeHtml(dataArray[0][1] || dataArray[0][0] || "REALISASI ANGGARAN TAHUN 2026")}</th></tr>`;
+            let htmlHead = `<tr><th colspan="6" class="text-center font-bold text-lg pt-4 pb-1 border-x border-t border-slate-400 bg-white">${escapeHtml(dataArray[0][1] || dataArray[0][0] || ("REALISASI ANGGARAN TAHUN " + currentTahun))}</th></tr>`;
 
             // Baris 2: Nama BKD
             htmlHead += `<tr><th colspan="6" class="text-center font-bold text-md pb-4 border-x border-b border-slate-400 bg-white">${escapeHtml(dataArray[1][1] || dataArray[1][0] || "BADAN KEPEGAWAIAN DAERAH PROVINSI KALIMANTAN TIMUR")}</th></tr>`;
@@ -1337,7 +1397,7 @@
             const ws = XLSX.utils.aoa_to_sheet(currentBulanData);
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, bulan || 'LRA');
-            XLSX.writeFile(wb, `LRA_BKD_${bulan}_2026.xlsx`);
+            XLSX.writeFile(wb, `LRA_BKD_${bulan}_${currentTahun}.xlsx`);
         }
 
         // FIX #2: pindah ke tab Rincian LRA Bulanan & langsung pilih bulan yang diklik di chart
@@ -1437,7 +1497,7 @@
             document.getElementById('komparasi-loading').classList.add('flex');
 
             try {
-                const data = await fetchWithRetry(SCRIPT_URL + "?bulan=" + encodeURIComponent(bulan));
+                const data = await fetchWithRetry(buildScriptUrl({ bulan }));
                 if (data.error) throw new Error(data.error);
                 renderKomparasiChart(data, bulan);
             } catch (error) {
@@ -1495,7 +1555,7 @@
             const totalPersen = totalPagu > 0 ? (totalRealisasi / totalPagu * 100) : 0;
             const totalRowHtml = `
                 <tr class="bg-slate-100 font-bold border-t-2 border-slate-400">
-                    <td class="p-2 border border-slate-300">Realisasi ${escapeHtml(bulan)} 2026</td>
+                    <td class="p-2 border border-slate-300">Realisasi ${escapeHtml(bulan)} ${currentTahun}</td>
                     <td class="p-2 border border-slate-300 text-right">${formatNumber(totalPagu)}</td>
                     <td class="p-2 border border-slate-300 text-right">${formatNumber(totalRealisasi)}</td>
                     <td class="p-2 border border-slate-300 text-right">${formatNumber(totalSisa)}</td>
@@ -1504,6 +1564,20 @@
 
             document.getElementById('komparasi-table-body').innerHTML = rowsHtml + totalRowHtml;
         }
+
+        // FIX V: baca ?tahun=... dari URL (kalau ada) SEBELUM fetchData() pertama kali dipanggil,
+        // supaya request awal sudah langsung pakai tahun yang benar — bukan selalu default 2026
+        // dulu baru re-fetch.
+        (function initTahunFromUrl() {
+            const params = new URLSearchParams(window.location.search);
+            const tahunParam = params.get('tahun');
+            if (tahunParam && TAHUN_TERSEDIA.includes(tahunParam)) {
+                currentTahun = tahunParam;
+                document.getElementById('tahun-label').textContent = currentTahun;
+                document.title = `Dashboard Realisasi Anggaran BKD ${currentTahun}`;
+            }
+            initTahunSelector();
+        })();
 
         fetchData();
 
