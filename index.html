@@ -1617,7 +1617,14 @@
 // L=Tdk Dapat Dilaksanakan | N=Tdk Selesai | P=Sisa Kontrak | M,O,Q=Keterangan
 let progList = [], progRows = [], progCharts = {};
 
-const progNum = v => typeof v === 'number' ? v : (Number(String(v).replace(/,/g, '')) || 0);
+// Angka normal datang sebagai number (getValues). Fallback untuk teks berformat "1.234,56" atau "1,234.56".
+const progNum = v => {
+    if (typeof v === 'number') return v;
+    let s = String(v).trim().replace(/[^0-9,.\-]/g, '');
+    if (!s) return 0;
+    s = s.lastIndexOf(',') > s.lastIndexOf('.') ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, '');
+    return Number(s) || 0;
+};
 const progStr = v => (v === null || v === undefined) ? '' : String(v).trim();
 const progPct = (a, b) => b > 0 ? (a / b * 100) : 0;
 const progFmt = v => Math.round(v).toLocaleString('id-ID');
@@ -1671,6 +1678,7 @@ async function loadPrognosisList() {
     try {
         const list = await fetchWithRetry(buildScriptUrl({ mode: 'prognosis' }));
         if (list.error) throw new Error(list.error);
+        if (!Array.isArray(list)) throw new Error('Respons Apps Script bukan daftar tab — kemungkinan deployment Apps Script belum diperbarui ke versi terbaru (Deploy → Manage deployments → New version).');
         if (!list.length) throw new Error('Tidak ada tab di spreadsheet prognosis.');
         progList = list;
         const sel = document.getElementById('prognosisSelector');
