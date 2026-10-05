@@ -25,6 +25,8 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- FIX #3: SheetJS untuk export tabel LRA ke file Excel -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- FIX X: ExcelJS khusus untuk "Unduh Excel" LRA bertema (warna/border/format angka). SheetJS tetap dipakai untuk ekspor per-PPTK. -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 
     <script>
@@ -1460,16 +1462,136 @@
         // di memori (currentBulanData) — tidak perlu fetch ulang ke Apps Script.
         // Catatan: yang diunduh adalah seluruh data bulan tersebut, bukan hasil filter pencarian,
         // supaya file yang dibagikan tetap lengkap.
-        function exportToExcel() {
+        // FIX X: Unduh Excel kini meniru tampilan Cetak Dokumen (warna per tingkat, border, format angka,
+        // header tabel biru, baris TOTAL gelap). Memakai ExcelJS karena SheetJS edisi gratis tidak
+        // mendukung styling sel. Warna mengikuti kelas Tailwind di getRowMeta() agar selalu konsisten.
+        const XLS_FILL_BY_BG = {
+            'bg-orange-100': 'FFFFEDD5',   // 5.03 (total BKD + UPTD)
+            'bg-gray-200':   'FFE5E7EB',   // unit organisasi
+            'bg-indigo-100': 'FFE0E7FF',   // Program
+            'bg-cyan-100':   'FFCFFAFE',   // Kegiatan
+            'bg-[#e5f5e0]':  'FFE5F5E0'    // Sub Kegiatan
+        };
+        const XLS_INDENT_BY_PL = { 'pl-2': 0, 'pl-4': 1, 'pl-6': 2, 'pl-8': 3, 'pl-10': 4 };
+
+        function buildLraWorkbook(dataArray, tahun, sheetName) {
+            const wb = new ExcelJS.Workbook();
+            const ws = wb.addWorksheet((sheetName || 'LRA').substring(0, 31), {
+                views: [{ state: 'frozen', ySplit: 3 }], // 3 baris judul/header tetap terlihat saat scroll
+                pageSetup: {
+                    orientation: 'landscape', paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 0,
+                    margins: { left: 0.4, right: 0.4, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 },
+                    printTitlesRow: '1:3' // header tabel diulang di tiap halaman cetak
+                }
+            });
+            ws.columns = [{ width: 24 }, { width: 62 }, { width: 21 }, { width: 21 }, { width: 21 }, { width: 9 }];
+
+            const thin = { style: 'thin', color: { argb: 'FF000000' } };
+            const border = { top: thin, left: thin, bottom: thin, right: thin };
+            const fill = argb => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } });
+            const NUM = '#,##0.00';
+
+            // Baris 1-2: judul (merge A:F)
+            const titles = [
+                dataArray[0][1] || dataArray[0][0] || ('REALISASI ANGGARAN TAHUN ' + tahun),
+                dataArray[1][1] || dataArray[1][0] || 'BADAN KEPEGAWAIAN DAERAH PROVINSI KALIMANTAN TIMUR'
+            ];
+            titles.forEach((t, i) => {
+                const r = ws.getRow(i + 1);
+                ws.mergeCells(i + 1, 1, i + 1, 6);
+                r.getCell(1).value = String(t);
+                r.getCell(1).font = { bold: true, size: i === 0 ? 14 : 11 };
+                r.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
+                r.getCell(1).border = border;
+                r.height = i === 0 ? 24 : 20;
+            });
+
+            // Baris 3: header kolom (biru)
+            const head = ws.getRow(3);
+            for (let c = 0; c < 6; c++) {
+                const cell = head.getCell(c + 1);
+                cell.value = String(dataArray[2][c] || '');
+                cell.font = { bold: true };
+                cell.fill = fill('FFBFDBFE');
+                cell.border = border;
+                cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+            }
+            head.height = 32;
+
+            // Baris data
+            let detailCount = 0, totPagu = 0, totReal = 0, totSisa = 0;
+            for (let i = 3; i < dataArray.length; i++) {
+                const row = dataArray[i];
+                if (!row || row.slice(0, 6).every(v => v === '' || v === null || v === undefined)) continue; // lewati baris kosong
+
+                const kode = row[0] ? String(row[0]).trim() : '';
+                const meta = getRowMeta(kode);
+                const pagu = parseNumber(row[2]), real = parseNumber(row[3]), sisa = parseNumber(row[4]);
+                const isAnomaly = meta.isDetail && pagu > 0 && real > pagu; // sama dengan penanda di tabel layar
+                const bg = isAnomaly ? 'FFFFE4E6' : XLS_FILL_BY_BG[meta.bgClass];
+                const bold = isAnomaly || meta.fontClass !== 'font-normal';
+
+                if (meta.isDetail) { detailCount++; totPagu += pagu; totReal += real; totSisa += sisa; }
+
+                const r = ws.addRow([]);
+                const uraian = (isAnomaly ? '⚠ ' : '') + (row[1] || '');
+                const pctRaw = row[5] === undefined || row[5] === null ? '' : String(row[5]).trim();
+                const vals = [kode, uraian, pagu, real, sisa, (pctRaw === '' || pctRaw === '-') ? '-' : parseNumber(pctRaw)];
+
+                vals.forEach((v, c) => {
+                    const cell = r.getCell(c + 1);
+                    cell.value = v;
+                    cell.border = border;
+                    cell.font = { bold };
+                    if (bg) cell.fill = fill(bg);
+                    if (c === 0) cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                    else if (c === 1) cell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true, indent: XLS_INDENT_BY_PL[meta.alignUraian] || 0 };
+                    else {
+                        cell.alignment = { horizontal: 'right', vertical: 'middle' };
+                        if (typeof v === 'number') cell.numFmt = (c === 5) ? '0.00' : NUM;
+                    }
+                });
+            }
+
+            // Baris TOTAL (hanya baris detail Belanja, sama dengan tfoot di layar)
+            if (detailCount > 0) {
+                const r = ws.addRow([]);
+                const rn = r.number;
+                ws.mergeCells(rn, 1, rn, 2);
+                const persen = totPagu > 0 ? (totReal / totPagu * 100) : 0;
+                [`TOTAL (${detailCount} baris detail)`, null, totPagu, totReal, totSisa, persen].forEach((v, c) => {
+                    const cell = r.getCell(c + 1);
+                    if (v !== null) cell.value = v;
+                    cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+                    cell.fill = fill('FF334155');
+                    cell.border = border;
+                    cell.alignment = { horizontal: c === 0 ? 'center' : 'right', vertical: 'middle' };
+                    if (c >= 2) cell.numFmt = (c === 5) ? '0.00' : NUM;
+                });
+                r.height = 22;
+            }
+            return wb;
+        }
+
+        async function exportToExcel() {
             const bulan = document.getElementById('bulanSelector').value;
             if (!currentBulanData.length) {
                 alert('Pilih bulan terlebih dahulu sebelum mengunduh.');
                 return;
             }
-            const ws = XLSX.utils.aoa_to_sheet(currentBulanData);
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, bulan || 'LRA');
-            XLSX.writeFile(wb, `LRA_BKD_${bulan}_${currentTahun}.xlsx`);
+            try {
+                const wb = buildLraWorkbook(currentBulanData, currentTahun, bulan || 'LRA');
+                const buf = await wb.xlsx.writeBuffer();
+                const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = `LRA_BKD_${bulan}_${currentTahun}.xlsx`;
+                document.body.appendChild(a); a.click(); a.remove();
+                setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+            } catch (err) {
+                console.error('Gagal membuat Excel:', err);
+                alert('Gagal membuat file Excel: ' + err.message);
+            }
         }
 
         // FIX #2: pindah ke tab Rincian LRA Bulanan & langsung pilih bulan yang diklik di chart
