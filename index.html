@@ -189,7 +189,7 @@
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10 no-print">
                 <div class="glass-card rounded-2xl p-6 relative overflow-hidden">
                     <div class="flex justify-between items-start mb-4 relative z-10">
-                        <div><p class="text-slate-500 text-xs font-bold uppercase tracking-wider mb-1">Pagu Anggaran</p><h3 id="val-pagu" class="text-2xl font-black text-slate-800">-</h3></div>
+                        <div><p class="text-slate-500 text-xs font-bold uppercase tracking-wider mb-1">Pagu Anggaran</p><h3 id="val-pagu" class="text-2xl font-black text-slate-800">-</h3><p id="pagu-note" class="text-[11px] text-slate-400 mt-1"></p></div>
                         <div class="bg-blue-100 text-blue-600 p-3 rounded-xl"><i class="fas fa-wallet text-xl"></i></div>
                     </div>
                 </div>
@@ -530,6 +530,19 @@
         const BULAN_ID = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
         const getNamaBulanSekarang = () => BULAN_ID[new Date().getMonth()];
 
+        // APBD-P: Oktober dipecah jadi 2 snapshot. Nama sheet HARUS persis "Oktober" dan "Oktober-P".
+        const BULAN_OPTIONS = BULAN_ID.flatMap(b => b === 'Oktober' ? ['Oktober', 'Oktober-P'] : [b]);
+        const bulanLabel = v => String(v).replace(/-P$/, ' (Perubahan)');
+        function populateBulanSelectors() {
+            ['bulanSelector', 'komparasiBulanSelector', 'pakpaBulanSelector'].forEach(id => {
+                const sel = document.getElementById(id);
+                const placeholder = sel.querySelector('option[disabled]'); // pertahankan "-- Pilih Bulan --"
+                sel.innerHTML = '';
+                if (placeholder) sel.appendChild(placeholder);
+                BULAN_OPTIONS.forEach(b => sel.add(new Option(b === 'Oktober' ? 'Oktober (Murni)' : bulanLabel(b), b)));
+            });
+        }
+
         // FIX V: dukungan multi-tahun. currentTahun adalah state GLOBAL — satu selector di
         // Ringkasan Eksekutif mengendalikan seluruh dashboard (semua tab, semua chart).
         // TAHUN_TERSEDIA dipakai untuk isi dropdown; tambah tahun baru cukup tambah di sini
@@ -728,14 +741,28 @@
                 // kalender sekarang. Untuk tahun lain (mis. 2025, sudah lewat/selesai), langsung
                 // pakai baris terakhir sheet-nya (asumsinya sudah lengkap 12 bulan).
                 const isTahunBerjalan = String(new Date().getFullYear()) === currentTahun;
-                let latestData = isTahunBerjalan
-                    ? data.find(row => (getVal(row, 'Bulan') || '').toString().trim() === getNamaBulanSekarang())
-                    : null;
+                const bulanIni = getNamaBulanSekarang();
+                const kandidat = isTahunBerjalan
+                    ? data.filter(row => String(getVal(row, 'Bulan') || '').trim().split('-')[0] === bulanIni)
+                    : [];
+                let latestData = kandidat.length ? kandidat[kandidat.length - 1] : null; // "Oktober-P" menang atas "Oktober"
                 if (!latestData) latestData = data[data.length - 1]; // fallback: baris terakhir sheet
                 const totalPersen = parseNumber(getVal(latestData, 'Persentase'));
                 latestBulanName = getVal(latestData, 'Bulan') || ''; // FIX B: dipakai default bulan saat klik kartu PA/KPA
 
                 document.getElementById('val-pagu').textContent = formatRp(parseNumber(getVal(latestData, 'Pagu')));
+                // Penanda APBD-P (kolom opsional "Status Anggaran" & "Pagu Murni" di Master_Realisasi)
+                const statusRaw = getVal(latestData, 'Status Anggaran');
+                const statusAng = statusRaw ? String(statusRaw).trim() : '';
+                const paguMurni = parseNumber(getVal(latestData, 'Pagu Murni'));
+                const paguNow = parseNumber(getVal(latestData, 'Pagu'));
+                const noteEl = document.getElementById('pagu-note');
+                if (statusAng.toLowerCase() === 'perubahan' && paguMurni > 0) {
+                    const delta = paguNow - paguMurni;
+                    noteEl.innerHTML = `<span class="font-bold text-amber-600">APBD-P</span> · Murni ${formatRp(paguMurni)} (${delta >= 0 ? '+' : '-'}${formatRp(Math.abs(delta))})`;
+                } else {
+                    noteEl.textContent = statusAng ? `APBD ${statusAng}` : '';
+                }
                 document.getElementById('val-realisasi').textContent = formatRp(parseNumber(getVal(latestData, 'Realisasi')));
                 document.getElementById('val-sisa').textContent = formatRp(parseNumber(getVal(latestData, 'Sisa')));
                 document.getElementById('val-persen').textContent = totalPersen.toFixed(2) + '%';
@@ -970,7 +997,7 @@
 
             // FIX D: subtitle khusus untuk header halaman cetak
             document.getElementById('pakpa-print-title').textContent = `REALISASI ANGGARAN TAHUN ${currentTahun}`;
-            document.getElementById('pakpa-print-subtitle').textContent = `Rincian LRA — Wewenang ${pakpaDetailCategory} — Bulan ${bulan} ${currentTahun}`;
+            document.getElementById('pakpa-print-subtitle').textContent = `Rincian LRA — Wewenang ${pakpaDetailCategory} — Bulan ${bulanLabel(bulan)} ${currentTahun}`;
 
             document.getElementById('pakpa-detail-loading').classList.remove('hidden');
             document.getElementById('pakpa-detail-loading').classList.add('flex');
@@ -1417,10 +1444,10 @@
             box.classList.remove('hidden');
             if (selisih <= toleransi) {
                 box.className = 'mt-2 text-xs rounded-lg px-3 py-2 bg-emerald-50 text-emerald-700 border border-emerald-200';
-                box.innerHTML = `<i class="fas fa-circle-check mr-1"></i> Total Realisasi tabel (${formatRp(tabelRealisasi)}) cocok dengan Ringkasan Eksekutif bulan ${bulan}.`;
+                box.innerHTML = `<i class="fas fa-circle-check mr-1"></i> Total Realisasi tabel (${formatRp(tabelRealisasi)}) cocok dengan Ringkasan Eksekutif bulan ${bulanLabel(bulan)}.`;
             } else {
                 box.className = 'mt-2 text-xs rounded-lg px-3 py-2 bg-amber-50 text-amber-700 border border-amber-200';
-                box.innerHTML = `<i class="fas fa-triangle-exclamation mr-1"></i> Selisih ${formatRp(selisih)} antara Total tabel (${formatRp(tabelRealisasi)}) dan Ringkasan Eksekutif Master_Realisasi (${formatRp(master.realisasi)}) untuk bulan ${bulan}. Kemungkinan data di kedua sheet belum sinkron — perlu dicek manual, bukan berarti pasti salah.`;
+                box.innerHTML = `<i class="fas fa-triangle-exclamation mr-1"></i> Selisih ${formatRp(selisih)} antara Total tabel (${formatRp(tabelRealisasi)}) dan Ringkasan Eksekutif Master_Realisasi (${formatRp(master.realisasi)}) untuk bulan ${bulanLabel(bulan)}. Kemungkinan data di kedua sheet belum sinkron — perlu dicek manual, bukan berarti pasti salah.`;
             }
         }
 
@@ -1600,7 +1627,7 @@
             const totalPersen = totalPagu > 0 ? (totalRealisasi / totalPagu * 100) : 0;
             const totalRowHtml = `
                 <tr class="bg-slate-100 font-bold border-t-2 border-slate-400">
-                    <td class="p-2 border border-slate-300">Realisasi ${escapeHtml(bulan)} ${currentTahun}</td>
+                    <td class="p-2 border border-slate-300">Realisasi ${escapeHtml(bulanLabel(bulan))} ${currentTahun}</td>
                     <td class="p-2 border border-slate-300 text-right">${formatNumber(totalPagu)}</td>
                     <td class="p-2 border border-slate-300 text-right">${formatNumber(totalRealisasi)}</td>
                     <td class="p-2 border border-slate-300 text-right">${formatNumber(totalSisa)}</td>
@@ -1816,6 +1843,7 @@ function renderPrognosisDetail() {
         // FIX V: baca ?tahun=... dari URL (kalau ada) SEBELUM fetchData() pertama kali dipanggil,
         // supaya request awal sudah langsung pakai tahun yang benar — bukan selalu default 2026
         // dulu baru re-fetch.
+        populateBulanSelectors(); // harus sebelum deep-link ?bulan=Oktober-P diproses
         (function initTahunFromUrl() {
             const params = new URLSearchParams(window.location.search);
             const tahunParam = params.get('tahun');
